@@ -1,3 +1,3 @@
 fn main() {
-    println!("Hello, world!");
+    println!("What is the sound of one hand clapping?");
 }
