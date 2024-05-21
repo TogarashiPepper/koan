@@ -6,7 +6,7 @@ pub enum TokenType {
     Plus,
     Minus,
     Times,
-    Slash
+    Slash,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -40,20 +40,17 @@ impl<'a> TokenBuilder<'a> {
 
     fn chr(mut self, chr: char) -> TokenBuilder<'a> {
         self.chr = Some(chr);
-
         self
     }
 
     fn idx(mut self, idx: usize) -> TokenBuilder<'a> {
         self.idx = Some(idx);
-
         self
     }
 
-    fn build(mut self) -> Token<'a> {
+    fn build(self) -> Token<'a> {
         if self.variant.is_some() && self.idx.is_some() && self.chr.is_some() {
             let idx = self.idx.unwrap();
-
             let variant = self.variant.unwrap();
             let location = idx..idx + self.chr.unwrap().len_utf8();
             let lexeme = &self.input_string[location.clone()];
@@ -63,8 +60,7 @@ impl<'a> TokenBuilder<'a> {
                 location,
                 lexeme,
             }
-        }
-        else {
+        } else {
             panic!("Attempted to build builder without all of the fields filled out")
         }
     }
@@ -75,7 +71,7 @@ pub enum LexError {
     InvalidToken(String),
 }
 
-pub fn lex<'a>(input: &'a str) -> Result<Vec<Token<'a>>, LexError> {
+pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
     let it = input.chars().enumerate().peekable();
     let mut res = vec![];
 
@@ -84,7 +80,6 @@ pub fn lex<'a>(input: &'a str) -> Result<Vec<Token<'a>>, LexError> {
 
         let builder = TokenBuilder::new(input).chr(c).idx(idx);
 
-        // TODO: Make this code more DRY, perhaps a macro or some kind of helper?
         let token = match c {
             '○' => builder.variant(PiTimes).build(),
             '+' => builder.variant(Plus).build(),
