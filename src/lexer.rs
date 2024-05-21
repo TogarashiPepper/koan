@@ -7,6 +7,8 @@ pub enum TokenType {
     Minus,
     Times,
     Slash,
+    Equal,
+    DoubleEqual,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -19,7 +21,7 @@ pub struct Token<'a> {
 pub struct TokenBuilder<'a> {
     variant: Option<TokenType>,
     idx: Option<usize>,
-    chr: Option<char>,
+    lexeme: Option<&'a str>,
     input_string: &'a str,
 }
 
@@ -28,7 +30,7 @@ impl<'a> TokenBuilder<'a> {
         TokenBuilder {
             variant: None,
             idx: None,
-            chr: None,
+            lexeme: None,
             input_string: input,
         }
     }
@@ -38,8 +40,18 @@ impl<'a> TokenBuilder<'a> {
         self
     }
 
-    fn chr(mut self, chr: char) -> TokenBuilder<'a> {
-        self.chr = Some(chr);
+    fn lexeme(mut self, lexeme: &'a str) -> TokenBuilder<'a> {
+        self.lexeme = Some(lexeme);
+        self
+    }
+
+    /// Add the second character for multi-char tokens, the len is the length of the second
+    /// character in bytes. The two characters are assumed to be next to each other within the input
+    /// string, if they are not this method will not behave as expected.
+    fn second(mut self, len: usize) -> TokenBuilder<'a> {
+        let idx = self.idx.unwrap();
+        self.lexeme = Some(&self.input_string[idx..idx + self.lexeme.unwrap().len() + len]);
+
         self
     }
 
@@ -49,10 +61,10 @@ impl<'a> TokenBuilder<'a> {
     }
 
     fn build(self) -> Token<'a> {
-        if self.variant.is_some() && self.idx.is_some() && self.chr.is_some() {
+        if self.variant.is_some() && self.idx.is_some() && self.lexeme.is_some() {
             let idx = self.idx.unwrap();
             let variant = self.variant.unwrap();
-            let location = idx..idx + self.chr.unwrap().len_utf8();
+            let location = idx..idx + self.lexeme.unwrap().len();
             let lexeme = &self.input_string[location.clone()];
 
             Token {
@@ -72,13 +84,15 @@ pub enum LexError {
 }
 
 pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
-    let it = input.chars().enumerate().peekable();
+    let mut it = input.chars().enumerate().peekable();
     let mut res = vec![];
 
-    for (idx, c) in it {
+    while let Some((idx, c)) = it.next() {
         use TokenType::*;
 
-        let builder = TokenBuilder::new(input).chr(c).idx(idx);
+        let builder = TokenBuilder::new(input)
+            .lexeme(&input[idx..idx + c.len_utf8()])
+            .idx(idx);
 
         // `Builder::build(match { ... })` or `match { ... }.build()` ?
         let token = TokenBuilder::build(match c {
@@ -87,6 +101,14 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
             '-' => builder.variant(Minus),
             '*' => builder.variant(Times),
             '/' => builder.variant(Slash),
+            '=' => match it.peek() {
+                Some((_, '=')) => {
+                    it.next();
+
+                    builder.second('='.len_utf8()).variant(DoubleEqual)
+                }
+                None | Some(_) => builder.variant(Equal),
+            },
             otherwise => {
                 return Err(LexError::InvalidToken(
                     input[idx..idx + otherwise.len_utf8()].to_string(),
@@ -147,6 +169,31 @@ mod tests {
     #[test]
     fn lex_slash() {
         lex_single("/", Slash);
+    }
+
+    #[test]
+    fn lex_double_equal() {
+        lex_single("==", DoubleEqual);
+    }
+
+    #[test]
+    fn lex_double_then_plus() {
+        let got = lex("==+");
+        assert_eq!(
+            got,
+            Ok(vec![
+                Token {
+                    variant: DoubleEqual,
+                    location: 0..2,
+                    lexeme: "==",
+                },
+                Token {
+                    variant: Plus,
+                    location: 2..3,
+                    lexeme: "+",
+                }
+            ])
+        )
     }
 
     #[test]
