@@ -3,6 +3,7 @@ use std::ops::Range;
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenType {
     PiTimes,
+    Plus,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -24,9 +25,15 @@ pub fn lex<'a>(input: &'a str) -> Result<Vec<Token<'a>>, LexError> {
     for (idx, c) in it {
         use TokenType::*;
 
+        // TODO: Make this code more DRY, perhaps a macro or some kind of helper?
         let token = match c {
             x @ '○' => Token {
                 variant: PiTimes,
+                location: idx..idx + x.len_utf8(),
+                lexeme: &input[idx..idx + x.len_utf8()],
+            },
+            x @ '+' => Token {
+                variant: Plus,
                 location: idx..idx + x.len_utf8(),
                 lexeme: &input[idx..idx + x.len_utf8()],
             },
@@ -66,5 +73,10 @@ mod tests {
     #[test]
     fn lex_pitimes() {
         lex_single("○", PiTimes);
+    }
+
+    #[test]
+    fn lex_plus() {
+        lex_single("+", Plus);
     }
 }
