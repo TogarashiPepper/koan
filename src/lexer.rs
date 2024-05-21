@@ -83,7 +83,6 @@ pub fn lex<'a>(input: &'a str) -> Result<Vec<Token<'a>>, LexError> {
         use TokenType::*;
 
         let builder = TokenBuilder::new(input).chr(c).idx(idx);
-// idx..idx + x.len_utf8()
 
         // TODO: Make this code more DRY, perhaps a macro or some kind of helper?
         let token = match c {
