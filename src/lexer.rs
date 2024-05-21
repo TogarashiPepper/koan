@@ -1,4 +1,4 @@
-use std::ops::{Range, RangeInclusive};
+use std::ops::Range;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenType {
@@ -18,7 +18,7 @@ pub enum LexError {
 }
 
 pub fn lex<'a>(input: &'a str) -> Result<Vec<Token<'a>>, LexError> {
-    let mut it = input.chars().enumerate().peekable();
+    let it = input.chars().enumerate().peekable();
     let mut res = vec![];
 
     for (idx, c) in it {
