@@ -80,14 +80,19 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
 
         let builder = TokenBuilder::new(input).chr(c).idx(idx);
 
-        let token = match c {
-            '○' => builder.variant(PiTimes).build(),
-            '+' => builder.variant(Plus).build(),
-            '-' => builder.variant(Minus).build(),
-            '*' => builder.variant(Times).build(),
-            '/' => builder.variant(Slash).build(),
-            _ => return Err(LexError::InvalidToken(input[idx..=idx].to_string())),
-        };
+        // `Builder::build(match { ... })` or `match { ... }.build()` ?
+        let token = TokenBuilder::build(match c {
+            '○' => builder.variant(PiTimes),
+            '+' => builder.variant(Plus),
+            '-' => builder.variant(Minus),
+            '*' => builder.variant(Times),
+            '/' => builder.variant(Slash),
+            otherwise => {
+                return Err(LexError::InvalidToken(
+                    input[idx..idx + otherwise.len_utf8()].to_string(),
+                ))
+            }
+        });
 
         res.push(token);
     }
@@ -102,7 +107,7 @@ mod tests {
         TokenType::{self, *},
     };
 
-    fn ok<'a>(t: Token<'a>) -> Result<Vec<Token<'a>>, LexError> {
+    fn ok(t: Token<'_>) -> Result<Vec<Token<'_>>, LexError> {
         Ok(vec![t])
     }
 
@@ -142,5 +147,11 @@ mod tests {
     #[test]
     fn lex_slash() {
         lex_single("/", Slash);
+    }
+
+    #[test]
+    fn lex_invalid_token() {
+        let got = lex("~");
+        assert_eq!(got, Err(LexError::InvalidToken("~".to_owned())));
     }
 }
