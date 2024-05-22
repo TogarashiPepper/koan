@@ -9,6 +9,12 @@ pub enum TokenType {
     Slash,
     Equal,
     DoubleEqual,
+    Greater,
+    GreaterEqual,
+    Lesser,
+    LesserEqual,
+    LParen,
+    RParen
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -101,6 +107,9 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
             '-' => builder.variant(Minus),
             '*' => builder.variant(Times),
             '/' => builder.variant(Slash),
+            '(' => builder.variant(LParen),
+            ')' => builder.variant(RParen),
+            // TODO: Reduce code duplication for multi-char tokens
             '=' => match it.peek() {
                 Some((_, '=')) => {
                     it.next();
@@ -108,6 +117,22 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
                     builder.second('='.len_utf8()).variant(DoubleEqual)
                 }
                 None | Some(_) => builder.variant(Equal),
+            },
+            '>' => match it.peek() {
+                Some((_, '=')) => {
+                    it.next();
+
+                    builder.second('='.len_utf8()).variant(GreaterEqual)
+                },
+                None | Some(_) => builder.variant(Greater),
+            },
+            '<' => match it.peek() {
+                Some((_, '=')) => {
+                    it.next();
+
+                    builder.second('='.len_utf8()).variant(LesserEqual)
+                },
+                None | Some(_) => builder.variant(Lesser),
             },
             otherwise => {
                 return Err(LexError::InvalidToken(
@@ -174,6 +199,24 @@ mod tests {
     #[test]
     fn lex_double_equal() {
         lex_single("==", DoubleEqual);
+    }
+
+    #[test]
+    fn lex_greater_and_greater_equal() {
+        lex_single(">", Greater);
+        lex_single(">=", GreaterEqual);
+    }
+
+    #[test]
+    fn lex_lesser_and_lesser_equal() {
+        lex_single("<", Lesser);
+        lex_single("<=", LesserEqual);
+    }
+
+    #[test]
+    fn lex_l_r_parens() {
+        lex_single("(", LParen);
+        lex_single(")", RParen);
     }
 
     #[test]
