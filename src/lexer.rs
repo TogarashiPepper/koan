@@ -2,6 +2,7 @@ use std::ops::Range;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenType {
+    Ident,
     PiTimes,
     Plus,
     Minus,
@@ -14,7 +15,7 @@ pub enum TokenType {
     Lesser,
     LesserEqual,
     LParen,
-    RParen
+    RParen,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -127,7 +128,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
                     it.next();
 
                     builder.second('='.len_utf8()).variant(GreaterEqual)
-                },
+                }
                 None | Some(_) => builder.variant(Greater),
             },
             '<' => match it.peek() {
@@ -135,9 +136,26 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
                     it.next();
 
                     builder.second('='.len_utf8()).variant(LesserEqual)
-                },
+                }
                 None | Some(_) => builder.variant(Lesser),
             },
+            'a'..='z' | 'A'..='Z' | '_' => {
+                let start = idx;
+                let mut end = idx;
+
+                // TODO: Iterator version of this?
+                while let Some((_, k)) = it.peek() {
+                    if k.is_alphabetic() {
+                        it.next();
+
+                        end += 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                builder.second(end - start).variant(Ident)
+            }
             otherwise => {
                 return Err(LexError::InvalidToken(
                     input[idx..idx + otherwise.len_utf8()].to_string(),
@@ -241,6 +259,13 @@ mod tests {
                 }
             ])
         )
+    }
+
+    #[test]
+    fn lex_ident() {
+        lex_single("thisonehasnocaps", Ident);
+        lex_single("THISONEhascaps", Ident);
+        lex_single("_thisoneHasanunderscore", Ident);
     }
 
     #[test]
