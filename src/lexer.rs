@@ -96,6 +96,10 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
     while let Some((idx, c)) = it.next() {
         use TokenType::*;
 
+        if c.is_whitespace() {
+            continue;
+        }
+
         let builder = TokenBuilder::new(input)
             .lexeme(&input[idx..idx + c.len_utf8()])
             .idx(idx);
