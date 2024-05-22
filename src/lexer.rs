@@ -3,6 +3,7 @@ use std::ops::Range;
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenType {
     Ident,
+    Number,
     PiTimes,
     Plus,
     Minus,
@@ -156,6 +157,40 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
 
                 builder.second(end - start).variant(Ident)
             }
+            '0'..='9' => {
+                let start = idx;
+                let mut end = idx;
+                let mut seen_dot = false;
+
+                // TODO: Iterator version of this?
+                while let Some((_, k)) = it.peek() {
+                    if k.is_ascii_digit() {
+                        it.next();
+
+                        end += 1;
+                    }
+                    else if *k == '.' && !seen_dot {
+                        seen_dot = true;
+
+                        it.next();
+                        end += 1;
+
+                        // Consume digit or else un-consume dot
+                        match it.peek() {
+                            Some((_, '0'..='9')) => {
+                                it.next();
+                                end += 1
+                            },
+                            _ => end -= 1
+                        }
+                    }
+                    else {
+                        break;
+                    }
+                }
+
+                builder.second(end - start).variant(Number)
+            }
             otherwise => {
                 return Err(LexError::InvalidToken(
                     input[idx..idx + otherwise.len_utf8()].to_string(),
@@ -266,6 +301,13 @@ mod tests {
         lex_single("thisonehasnocaps", Ident);
         lex_single("THISONEhascaps", Ident);
         lex_single("_thisoneHasanunderscore", Ident);
+    }
+
+    #[test]
+    fn lex_number() {
+        lex_single("1234567890", Number);
+        lex_single("3.141592653589793", Number);
+        lex_single("0", Number);
     }
 
     #[test]
