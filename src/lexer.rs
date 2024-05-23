@@ -1,4 +1,8 @@
-use std::ops::Range;
+use std::{
+    iter::{Enumerate, Peekable},
+    ops::Range,
+    str::Chars,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenType {
@@ -48,6 +52,33 @@ impl<'a> TokenBuilder<'a> {
         self
     }
 
+    /// Helper method for multi-char tokens, it will check if the next char matches the specified
+    /// char and if it does it will consume it and return the token for the pair of characters.
+    /// If the next char does not match the specified char it will return the token for the single
+    /// character.
+    /// If the first provided token in the token pair is `None`, then that means if the next char
+    /// does not match the specified char then it will return `None`, indicating that the function
+    /// got an invalid char pair.
+    fn variant_pair(
+        self,
+        iterator: &mut Peekable<Enumerate<Chars>>,
+        char: char,
+        (single_char_token, char_pair_token): (Option<TokenType>, TokenType),
+    ) -> Option<TokenBuilder<'a>> {
+        match iterator.peek() {
+            Some((_, next_char)) if *next_char == char => {
+                iterator.next();
+
+                Some(self.second(char.len_utf8()).variant(char_pair_token))
+            }
+            // TODO: probably avoid Some(_) here later on for cases of multi-chars with the same start char
+            None | Some(_) => match single_char_token {
+                Some(single_char) => Some(self.variant(single_char)),
+                None => None,
+            },
+        }
+    }
+
     fn lexeme(mut self, lexeme: &'a str) -> TokenBuilder<'a> {
         self.lexeme = Some(lexeme);
         self
@@ -69,19 +100,13 @@ impl<'a> TokenBuilder<'a> {
     }
 
     fn build(self) -> Token<'a> {
-        if self.variant.is_some() && self.idx.is_some() && self.lexeme.is_some() {
-            let idx = self.idx.unwrap();
-            let variant = self.variant.unwrap();
-            let location = idx..idx + self.lexeme.unwrap().len();
-            let lexeme = &self.input_string[location.clone()];
-
-            Token {
+        match (self.variant, self.idx, self.lexeme) {
+            (Some(variant), Some(idx), Some(lexeme)) => Token {
                 variant,
-                location,
+                location: idx..idx + lexeme.len(),
                 lexeme,
-            }
-        } else {
-            panic!("Attempted to build builder without all of the fields filled out")
+            },
+            _ => panic!("Attempted to build builder without all of the fields filled out"),
         }
     }
 }
@@ -168,8 +193,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
                         it.next();
 
                         end += 1;
-                    }
-                    else if *k == '.' && !seen_dot {
+                    } else if *k == '.' && !seen_dot {
                         seen_dot = true;
 
                         it.next();
@@ -180,11 +204,10 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
                             Some((_, '0'..='9')) => {
                                 it.next();
                                 end += 1
-                            },
-                            _ => end -= 1
+                            }
+                            _ => end -= 1,
                         }
-                    }
-                    else {
+                    } else {
                         break;
                     }
                 }
