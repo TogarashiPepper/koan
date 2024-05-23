@@ -52,13 +52,14 @@ impl<'a> TokenBuilder<'a> {
         self
     }
 
-    /// Helper method for multi-char tokens, it will check if the next char matches the specified
-    /// char and if it does it will consume it and return the token for the pair of characters.
+    /// Helper method for multi-char variants, it will check if the next char matches the specified
+    /// char and if it does it will consume it and build the variant for the pair of characters.
     /// If the next char does not match the specified char it will return the token for the single
     /// character.
     ///
     /// If the first provided token in the token pair is `None`, then that means if the next char
-    /// does not match the specified char then it will return `None` as there's no fallback variant.
+    /// does not match the specified char then it will return `LexError::PartialMultiCharToken` as
+    /// there's no fallback variant.
     fn variant_pair(
         self,
         iterator: &mut Peekable<Enumerate<Chars>>,
