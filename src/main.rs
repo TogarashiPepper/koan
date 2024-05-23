@@ -10,8 +10,15 @@ fn main() {
             LexError::InvalidToken(offending_token) => {
                 eprintln!("The token `{}` is invalid", offending_token);
                 std::process::exit(1)
-            },
-        }
+            }
+            LexError::PartialMultiCharToken(offending_token, expected_token) => {
+                eprintln!(
+                    "The token `{}` is partial of `{}`",
+                    offending_token, expected_token
+                );
+                std::process::exit(1)
+            }
+        },
     };
 
     println!("{:?}", tokens);

@@ -56,27 +56,46 @@ impl<'a> TokenBuilder<'a> {
     /// char and if it does it will consume it and return the token for the pair of characters.
     /// If the next char does not match the specified char it will return the token for the single
     /// character.
+    ///
     /// If the first provided token in the token pair is `None`, then that means if the next char
-    /// does not match the specified char then it will return `None`, indicating that the function
-    /// got an invalid char pair.
+    /// does not match the specified char then it will return `None` as there's no fallback variant.
     fn variant_pair(
         self,
         iterator: &mut Peekable<Enumerate<Chars>>,
-        char: char,
+        (first_char, next_char): (char, char),
         (single_char_token, char_pair_token): (Option<TokenType>, TokenType),
-    ) -> Option<TokenBuilder<'a>> {
+    ) -> Result<TokenBuilder<'a>, LexError> {
         match iterator.peek() {
-            Some((_, next_char)) if *next_char == char => {
+            Some((_, peek_char)) if *peek_char == next_char => {
                 iterator.next();
 
-                Some(self.second(char.len_utf8()).variant(char_pair_token))
+                Ok(self.second(next_char.len_utf8()).variant(char_pair_token))
             }
             // TODO: probably avoid Some(_) here later on for cases of multi-chars with the same start char
             None | Some(_) => match single_char_token {
-                Some(single_char) => Some(self.variant(single_char)),
-                None => None,
+                Some(single_char) => Ok(self.variant(single_char)),
+                None => return Err(LexError::PartialMultiCharToken(first_char, next_char)),
             },
         }
+    }
+
+    /// Helper method for large variants, it will consume characters until the callback returns.
+    /// The callback is expected to consume characters until it reaches a character that does not
+    /// belong to the variant.
+    ///
+    /// The callback takes a mutable reference to the iterator and a mutable reference to the end
+    /// index. The end index is the index of the last character of the variant.
+    fn large_varaint(
+        self,
+        start: usize,
+        iterator: &mut Peekable<Enumerate<Chars>>,
+        variant: TokenType,
+        callback: Box<dyn Fn(&mut Peekable<Enumerate<Chars>>, &mut usize) -> ()>,
+    ) -> TokenBuilder<'a> {
+        let mut end = start;
+        callback(iterator, &mut end);
+
+        self.second(end - start).variant(variant)
     }
 
     fn lexeme(mut self, lexeme: &'a str) -> TokenBuilder<'a> {
@@ -113,6 +132,7 @@ impl<'a> TokenBuilder<'a> {
 
 #[derive(Debug, PartialEq)]
 pub enum LexError {
+    PartialMultiCharToken(char, char),
     InvalidToken(String),
 }
 
@@ -140,80 +160,56 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
             '/' => builder.variant(Slash),
             '(' => builder.variant(LParen),
             ')' => builder.variant(RParen),
-            // TODO: Reduce code duplication for multi-char tokens
-            '=' => match it.peek() {
-                Some((_, '=')) => {
-                    it.next();
+            '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Equal), DoubleEqual))?,
+            '>' => builder.variant_pair(&mut it, ('>', '='), (Some(Greater), GreaterEqual))?,
+            '<' => builder.variant_pair(&mut it, ('<', '='), (Some(Lesser), LesserEqual))?,
+            'a'..='z' | 'A'..='Z' | '_' => builder.large_varaint(
+                idx,
+                &mut it,
+                Ident,
+                Box::new(|it, end| {
+                    while let Some((_, k)) = it.peek() {
+                        if k.is_alphabetic() || *k == '_' {
+                            it.next();
 
-                    builder.second('='.len_utf8()).variant(DoubleEqual)
-                }
-                None | Some(_) => builder.variant(Equal),
-            },
-            '>' => match it.peek() {
-                Some((_, '=')) => {
-                    it.next();
-
-                    builder.second('='.len_utf8()).variant(GreaterEqual)
-                }
-                None | Some(_) => builder.variant(Greater),
-            },
-            '<' => match it.peek() {
-                Some((_, '=')) => {
-                    it.next();
-
-                    builder.second('='.len_utf8()).variant(LesserEqual)
-                }
-                None | Some(_) => builder.variant(Lesser),
-            },
-            'a'..='z' | 'A'..='Z' | '_' => {
-                let start = idx;
-                let mut end = idx;
-
-                // TODO: Iterator version of this?
-                while let Some((_, k)) = it.peek() {
-                    if k.is_alphabetic() {
-                        it.next();
-
-                        end += 1;
-                    } else {
-                        break;
-                    }
-                }
-
-                builder.second(end - start).variant(Ident)
-            }
-            '0'..='9' => {
-                let start = idx;
-                let mut end = idx;
-                let mut seen_dot = false;
-
-                // TODO: Iterator version of this?
-                while let Some((_, k)) = it.peek() {
-                    if k.is_ascii_digit() {
-                        it.next();
-
-                        end += 1;
-                    } else if *k == '.' && !seen_dot {
-                        seen_dot = true;
-
-                        it.next();
-                        end += 1;
-
-                        // Consume digit or else un-consume dot
-                        match it.peek() {
-                            Some((_, '0'..='9')) => {
-                                it.next();
-                                end += 1
-                            }
-                            _ => end -= 1,
+                            *end += 1;
+                        } else {
+                            break;
                         }
-                    } else {
-                        break;
                     }
-                }
+                }),
+            ),
+            '0'..='9' => builder.large_varaint(
+                idx,
+                &mut it,
+                Number,
+                Box::new(|it, end| {
+                    let mut seen_dot = false;
+                    while let Some((_, k)) = it.peek() {
+                        if k.is_ascii_digit() {
+                            it.next();
 
-                builder.second(end - start).variant(Number)
-            }
+                            *end += 1;
+                        } else if *k == '.' && !seen_dot {
+                            seen_dot = true;
+
+                            it.next();
+                            *end += 1;
+
+                            // Consume digit or else un-consume dot
+                            match it.peek() {
+                                Some((_, '0'..='9')) => {
+                                    it.next();
+                                    *end += 1
+                                }
+                                _ => *end -= 1,
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }),
+            ),
             otherwise => {
                 return Err(LexError::InvalidToken(
                     input[idx..idx + otherwise.len_utf8()].to_string(),
@@ -324,6 +320,7 @@ mod tests {
         lex_single("thisonehasnocaps", Ident);
         lex_single("THISONEhascaps", Ident);
         lex_single("_thisoneHasanunderscore", Ident);
+        lex_single("thisoneHas_anunderscoreinbetween", Ident);
     }
 
     #[test]
@@ -331,6 +328,15 @@ mod tests {
         lex_single("1234567890", Number);
         lex_single("3.141592653589793", Number);
         lex_single("0", Number);
+        let got = lex("1234567890");
+        assert_eq!(
+            got,
+            Ok(vec![Token {
+                variant: Number,
+                location: 0..10,
+                lexeme: "1234567890",
+            },])
+        )
     }
 
     #[test]
