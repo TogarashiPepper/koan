@@ -86,7 +86,7 @@ impl<'a> TokenBuilder<'a> {
     ///
     /// The callback takes a mutable reference to the iterator and a mutable reference to the end
     /// index. The end index is the index of the last character of the variant.
-    fn large_varaint(
+    fn large_variant(
         self,
         start: usize,
         iterator: &mut Peekable<Enumerate<Chars>>,
@@ -164,7 +164,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
             '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Equal), DoubleEqual))?,
             '>' => builder.variant_pair(&mut it, ('>', '='), (Some(Greater), GreaterEqual))?,
             '<' => builder.variant_pair(&mut it, ('<', '='), (Some(Lesser), LesserEqual))?,
-            'a'..='z' | 'A'..='Z' | '_' => builder.large_varaint(
+            'a'..='z' | 'A'..='Z' | '_' => builder.large_variant(
                 idx,
                 &mut it,
                 Ident,
@@ -180,7 +180,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
                     }
                 }),
             ),
-            '0'..='9' => builder.large_varaint(
+            '0'..='9' => builder.large_variant(
                 idx,
                 &mut it,
                 Number,
