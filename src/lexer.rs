@@ -80,25 +80,6 @@ impl<'a> TokenBuilder<'a> {
         }
     }
 
-    /// Helper method for large variants, it will consume characters until the callback returns.
-    /// The callback is expected to consume characters until it reaches a character that does not
-    /// belong to the variant.
-    ///
-    /// The callback takes a mutable reference to the iterator and a mutable reference to the end
-    /// index. The end index is the index of the last character of the variant.
-    fn large_variant(
-        self,
-        start: usize,
-        iterator: &mut Peekable<Enumerate<Chars>>,
-        variant: TokenType,
-        callback: Box<dyn Fn(&mut Peekable<Enumerate<Chars>>, &mut usize) -> ()>,
-    ) -> TokenBuilder<'a> {
-        let mut end = start;
-        callback(iterator, &mut end);
-
-        self.second(end - start).variant(variant)
-    }
-
     fn lexeme(mut self, lexeme: &'a str) -> TokenBuilder<'a> {
         self.lexeme = Some(lexeme);
         self
@@ -164,53 +145,49 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
             '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Equal), DoubleEqual))?,
             '>' => builder.variant_pair(&mut it, ('>', '='), (Some(Greater), GreaterEqual))?,
             '<' => builder.variant_pair(&mut it, ('<', '='), (Some(Lesser), LesserEqual))?,
-            'a'..='z' | 'A'..='Z' | '_' => builder.large_variant(
-                idx,
-                &mut it,
-                Ident,
-                Box::new(|it, end| {
-                    while let Some((_, k)) = it.peek() {
-                        if k.is_alphabetic() || *k == '_' {
-                            it.next();
+            'a'..='z' | 'A'..='Z' | '_' => {
+                let mut end = idx;
+                while let Some((_, k)) = it.peek() {
+                    if k.is_alphabetic() || *k == '_' {
+                        it.next();
 
-                            *end += 1;
-                        } else {
-                            break;
-                        }
+                        end += 1;
+                    } else {
+                        break;
                     }
-                }),
-            ),
-            '0'..='9' => builder.large_variant(
-                idx,
-                &mut it,
-                Number,
-                Box::new(|it, end| {
-                    let mut seen_dot = false;
-                    while let Some((_, k)) = it.peek() {
-                        if k.is_ascii_digit() {
-                            it.next();
+                }
 
-                            *end += 1;
-                        } else if *k == '.' && !seen_dot {
-                            seen_dot = true;
+                builder.second(end - idx).variant(TokenType::Ident)
+            }
+            '0'..='9' => {
+                let mut end = idx;
+                let mut seen_dot = false;
+                while let Some((_, k)) = it.peek() {
+                    if k.is_ascii_digit() {
+                        it.next();
 
-                            it.next();
-                            *end += 1;
+                        end += 1;
+                    } else if *k == '.' && !seen_dot {
+                        seen_dot = true;
 
-                            // Consume digit or else un-consume dot
-                            match it.peek() {
-                                Some((_, '0'..='9')) => {
-                                    it.next();
-                                    *end += 1
-                                }
-                                _ => *end -= 1,
+                        it.next();
+                        end += 1;
+
+                        // Consume digit or else un-consume dot
+                        match it.peek() {
+                            Some((_, '0'..='9')) => {
+                                it.next();
+                                end += 1
                             }
-                        } else {
-                            break;
+                            _ => end -= 1,
                         }
+                    } else {
+                        break;
                     }
-                }),
-            ),
+                }
+
+                builder.second(end - idx).variant(TokenType::Number)
+            }
             otherwise => {
                 return Err(LexError::InvalidToken(
                     input[idx..idx + otherwise.len_utf8()].to_string(),
@@ -329,15 +306,6 @@ mod tests {
         lex_single("1234567890", Number);
         lex_single("3.141592653589793", Number);
         lex_single("0", Number);
-        let got = lex("1234567890");
-        assert_eq!(
-            got,
-            Ok(vec![Token {
-                variant: Number,
-                location: 0..10,
-                lexeme: "1234567890",
-            },])
-        )
     }
 
     #[test]
