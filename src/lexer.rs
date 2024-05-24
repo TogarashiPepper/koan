@@ -1,4 +1,8 @@
-use std::ops::Range;
+use std::{
+    iter::{Enumerate, Peekable},
+    ops::Range,
+    str::Chars,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenType {
@@ -48,6 +52,34 @@ impl<'a> TokenBuilder<'a> {
         self
     }
 
+    /// Helper method for multi-char variants, it will check if the next char matches the specified
+    /// char and if it does it will consume it and build the variant for the pair of characters.
+    /// If the next char does not match the specified char it will return the token for the single
+    /// character.
+    ///
+    /// If the first provided token in the token pair is `None`, then that means if the next char
+    /// does not match the specified char then it will return `LexError::PartialMultiCharToken` as
+    /// there's no fallback variant.
+    fn variant_pair(
+        self,
+        iterator: &mut Peekable<Enumerate<Chars>>,
+        (first_char, next_char): (char, char),
+        (single_char_token, char_pair_token): (Option<TokenType>, TokenType),
+    ) -> Result<TokenBuilder<'a>, LexError> {
+        match iterator.peek() {
+            Some((_, peek_char)) if *peek_char == next_char => {
+                iterator.next();
+
+                Ok(self.second(next_char.len_utf8()).variant(char_pair_token))
+            }
+            // TODO: probably avoid Some(_) here later on for cases of multi-chars with the same start char
+            None | Some(_) => match single_char_token {
+                Some(single_char) => Ok(self.variant(single_char)),
+                None => return Err(LexError::PartialMultiCharToken(first_char, next_char)),
+            },
+        }
+    }
+
     fn lexeme(mut self, lexeme: &'a str) -> TokenBuilder<'a> {
         self.lexeme = Some(lexeme);
         self
@@ -69,25 +101,20 @@ impl<'a> TokenBuilder<'a> {
     }
 
     fn build(self) -> Token<'a> {
-        if self.variant.is_some() && self.idx.is_some() && self.lexeme.is_some() {
-            let idx = self.idx.unwrap();
-            let variant = self.variant.unwrap();
-            let location = idx..idx + self.lexeme.unwrap().len();
-            let lexeme = &self.input_string[location.clone()];
-
-            Token {
+        match (self.variant, self.idx, self.lexeme) {
+            (Some(variant), Some(idx), Some(lexeme)) => Token {
                 variant,
-                location,
+                location: idx..idx + lexeme.len(),
                 lexeme,
-            }
-        } else {
-            panic!("Attempted to build builder without all of the fields filled out")
+            },
+            _ => panic!("Attempted to build builder without all of the fields filled out"),
         }
     }
 }
 
 #[derive(Debug, PartialEq)]
 pub enum LexError {
+    PartialMultiCharToken(char, char),
     InvalidToken(String),
 }
 
@@ -115,38 +142,13 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
             '/' => builder.variant(Slash),
             '(' => builder.variant(LParen),
             ')' => builder.variant(RParen),
-            // TODO: Reduce code duplication for multi-char tokens
-            '=' => match it.peek() {
-                Some((_, '=')) => {
-                    it.next();
-
-                    builder.second('='.len_utf8()).variant(DoubleEqual)
-                }
-                None | Some(_) => builder.variant(Equal),
-            },
-            '>' => match it.peek() {
-                Some((_, '=')) => {
-                    it.next();
-
-                    builder.second('='.len_utf8()).variant(GreaterEqual)
-                }
-                None | Some(_) => builder.variant(Greater),
-            },
-            '<' => match it.peek() {
-                Some((_, '=')) => {
-                    it.next();
-
-                    builder.second('='.len_utf8()).variant(LesserEqual)
-                }
-                None | Some(_) => builder.variant(Lesser),
-            },
+            '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Equal), DoubleEqual))?,
+            '>' => builder.variant_pair(&mut it, ('>', '='), (Some(Greater), GreaterEqual))?,
+            '<' => builder.variant_pair(&mut it, ('<', '='), (Some(Lesser), LesserEqual))?,
             'a'..='z' | 'A'..='Z' | '_' => {
-                let start = idx;
                 let mut end = idx;
-
-                // TODO: Iterator version of this?
                 while let Some((_, k)) = it.peek() {
-                    if k.is_alphabetic() {
+                    if k.is_alphabetic() || *k == '_' {
                         it.next();
 
                         end += 1;
@@ -155,21 +157,17 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
                     }
                 }
 
-                builder.second(end - start).variant(Ident)
+                builder.second(end - idx).variant(TokenType::Ident)
             }
             '0'..='9' => {
-                let start = idx;
                 let mut end = idx;
                 let mut seen_dot = false;
-
-                // TODO: Iterator version of this?
                 while let Some((_, k)) = it.peek() {
                     if k.is_ascii_digit() {
                         it.next();
 
                         end += 1;
-                    }
-                    else if *k == '.' && !seen_dot {
+                    } else if *k == '.' && !seen_dot {
                         seen_dot = true;
 
                         it.next();
@@ -180,16 +178,15 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
                             Some((_, '0'..='9')) => {
                                 it.next();
                                 end += 1
-                            },
-                            _ => end -= 1
+                            }
+                            _ => end -= 1,
                         }
-                    }
-                    else {
+                    } else {
                         break;
                     }
                 }
 
-                builder.second(end - start).variant(Number)
+                builder.second(end - idx).variant(TokenType::Number)
             }
             otherwise => {
                 return Err(LexError::InvalidToken(
@@ -301,6 +298,7 @@ mod tests {
         lex_single("thisonehasnocaps", Ident);
         lex_single("THISONEhascaps", Ident);
         lex_single("_thisoneHasanunderscore", Ident);
+        lex_single("thisoneHas_anunderscoreinbetween", Ident);
     }
 
     #[test]
