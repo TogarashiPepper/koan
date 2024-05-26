@@ -75,7 +75,7 @@ impl<'a> TokenBuilder<'a> {
             // TODO: probably avoid Some(_) here later on for cases of multi-chars with the same start char
             None | Some(_) => match single_char_token {
                 Some(single_char) => Ok(self.variant(single_char)),
-                None => return Err(LexError::PartialMultiCharToken(first_char, next_char)),
+                None => Err(LexError::PartialMultiCharToken(first_char, next_char)),
             },
         }
     }
