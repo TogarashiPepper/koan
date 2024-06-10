@@ -3,8 +3,10 @@ mod parser;
 
 use lexer::{lex, LexError};
 
+use crate::parser::parse;
+
 fn main() {
-    let input = "○";
+    let input = "1 + 2 - 3";
     let tokens = match lex(input) {
         Ok(list) => list,
         Err(error) => match error {
@@ -21,6 +23,7 @@ fn main() {
             }
         },
     };
+    let ast = parse(tokens).unwrap();
 
-    println!("{:?}", tokens);
+    println!("{:?}", ast);
 }

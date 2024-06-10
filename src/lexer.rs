@@ -23,11 +23,29 @@ pub enum TokenType {
     RParen,
 }
 
+impl TokenType {
+    pub fn is_inf_op(&self) -> bool {
+        matches!(self, TokenType::Plus
+            | TokenType::Minus
+            | TokenType::Times
+            | TokenType::Slash
+            | TokenType::DoubleEqual
+            | TokenType::Greater
+            | TokenType::GreaterEqual
+            | TokenType::Lesser
+            | TokenType::LesserEqual)
+    }
+
+    pub fn is_pre_op(&self) -> bool {
+        matches!(self, TokenType::PiTimes)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token<'a> {
-    variant: TokenType,
-    location: Range<usize>,
-    lexeme: &'a str,
+    pub variant: TokenType,
+    pub location: Range<usize>,
+    pub lexeme: &'a str,
 }
 
 pub struct TokenBuilder<'a> {
@@ -288,6 +306,41 @@ mod tests {
                     variant: Plus,
                     location: 2..3,
                     lexeme: "+",
+                }
+            ])
+        )
+    }
+
+    #[test]
+    fn lex_one_plus_two_minus_three() {
+        let got = lex("1 + 2 - 3");
+        assert_eq!(
+            got,
+            Ok(vec![
+                Token {
+                    variant: Number,
+                    location: 0..1,
+                    lexeme: "1",
+                },
+                Token {
+                    variant: Plus,
+                    location: 2..3,
+                    lexeme: "+",
+                },
+                Token {
+                    variant: Number,
+                    location: 4..5,
+                    lexeme: "2",
+                },
+                Token {
+                    variant: Minus,
+                    location: 6..7,
+                    lexeme: "-",
+                },
+                Token {
+                    variant: Number,
+                    location: 8..9,
+                    lexeme: "3",
                 }
             ])
         )
