@@ -134,8 +134,17 @@ fn prefix_binding_power(op: TokenType) -> ((), u8) {
 #[cfg(test)]
 mod tests {
     use crate::{lexer::lex, parser::Ast};
-
     use super::*;
+
+    // `Box::new` is a lot to write across all test cases, and `box` is reserved so while single-char
+    // func name is a bit yucky, I think its worth the marginally shorter test cases.
+    fn b<T>(x: T) -> Box<T> {
+        Box::new(x)
+    }
+
+    fn assert_parse_expr(input: &'static str, expected: Expr) {
+        assert_parse(input, Ast::Expression(expected));
+    }
 
     fn assert_parse(input: &'static str, expected: Ast) {
         // For the sake of testing the parser, we'll assume the lexer is correct
@@ -155,13 +164,13 @@ mod tests {
     fn simple_binop() {
         use Expr::*;
 
-        assert_parse(
+        assert_parse_expr(
             "1 + 2",
-            Ast::Expression(BinOp {
-                lhs: Box::new(NumLit(1.0)),
+            BinOp {
+                lhs: b(NumLit(1.0)),
                 op: TokenType::Plus,
-                rhs: Box::new(NumLit(2.0)),
-            }),
+                rhs: b(NumLit(2.0)),
+            },
         )
     }
 
@@ -169,12 +178,12 @@ mod tests {
     fn simple_preop() {
         use Expr::*;
 
-        assert_parse(
+        assert_parse_expr(
             "○1",
-            Ast::Expression(PreOp {
+            PreOp {
                 op: TokenType::PiTimes,
-                rhs: Box::new(NumLit(1.0)),
-            }),
+                rhs: b(NumLit(1.0)),
+            },
         )
     }
 
@@ -182,17 +191,17 @@ mod tests {
     fn mult_binop_no_prec() {
         use Expr::*;
 
-        assert_parse(
+        assert_parse_expr(
             "1 + 2 - 3",
-            Ast::Expression(BinOp {
-                lhs: Box::new(BinOp {
-                    lhs: Box::new(NumLit(1.0)),
+            BinOp {
+                lhs: b(BinOp {
+                    lhs: b(NumLit(1.0)),
                     op: TokenType::Plus,
-                    rhs: Box::new(NumLit(2.0)),
+                    rhs: b(NumLit(2.0)),
                 }),
                 op: TokenType::Minus,
-                rhs: Box::new(NumLit(3.0)),
-            }),
+                rhs: b(NumLit(3.0)),
+            },
         )
     }
 
@@ -200,17 +209,17 @@ mod tests {
     fn paren_plus_times() {
         use Expr::*;
 
-        assert_parse(
+        assert_parse_expr(
             "(1 + 2) * 3",
-            Ast::Expression(BinOp {
-                lhs: Box::new(BinOp {
-                    lhs: Box::new(NumLit(1.0)),
+            BinOp {
+                lhs: b(BinOp {
+                    lhs: b(NumLit(1.0)),
                     op: TokenType::Plus,
-                    rhs: Box::new(NumLit(2.0)),
+                    rhs: b(NumLit(2.0)),
                 }),
                 op: TokenType::Times,
-                rhs: Box::new(NumLit(3.0)),
-            }),
+                rhs: b(NumLit(3.0)),
+            },
         )
     }
 
@@ -218,17 +227,17 @@ mod tests {
     fn plus_times() {
         use Expr::*;
 
-        assert_parse(
+        assert_parse_expr(
             "1 + 2 * 3",
-            Ast::Expression(BinOp {
-                lhs: Box::new(NumLit(1.0)),
+            BinOp {
+                lhs: b(NumLit(1.0)),
                 op: TokenType::Plus,
-                rhs: Box::new(BinOp {
-                    lhs: Box::new(NumLit(2.0)),
+                rhs: b(BinOp {
+                    lhs: b(NumLit(2.0)),
                     op: TokenType::Times,
-                    rhs: Box::new(NumLit(3.0)),
+                    rhs: b(NumLit(3.0)),
                 }),
-            }),
+            },
         )
     }
 }
