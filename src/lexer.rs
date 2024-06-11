@@ -1,5 +1,5 @@
 use std::{
-    iter::{Enumerate, Peekable},
+    iter::{Peekable, Map},
     ops::Range,
     str::Chars,
 };
@@ -25,15 +25,18 @@ pub enum TokenType {
 
 impl TokenType {
     pub fn is_inf_op(&self) -> bool {
-        matches!(self, TokenType::Plus
-            | TokenType::Minus
-            | TokenType::Times
-            | TokenType::Slash
-            | TokenType::DoubleEqual
-            | TokenType::Greater
-            | TokenType::GreaterEqual
-            | TokenType::Lesser
-            | TokenType::LesserEqual)
+        matches!(
+            self,
+            TokenType::Plus
+                | TokenType::Minus
+                | TokenType::Times
+                | TokenType::Slash
+                | TokenType::DoubleEqual
+                | TokenType::Greater
+                | TokenType::GreaterEqual
+                | TokenType::Lesser
+                | TokenType::LesserEqual
+        )
     }
 
     pub fn is_pre_op(&self) -> bool {
@@ -80,7 +83,7 @@ impl<'a> TokenBuilder<'a> {
     /// there's no fallback variant.
     fn variant_pair(
         self,
-        iterator: &mut Peekable<Enumerate<Chars>>,
+        iterator: &mut Peekable<Map<Chars, impl FnMut(char) -> (usize, char)>>,
         (first_char, next_char): (char, char),
         (single_char_token, char_pair_token): (Option<TokenType>, TokenType),
     ) -> Result<TokenBuilder<'a>, LexError> {
@@ -137,8 +140,15 @@ pub enum LexError {
 }
 
 pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
-    let mut it = input.chars().enumerate().peekable();
     let mut res = vec![];
+    let mut idx = 0;
+    // Poor man's enumerate that accounts for multi-byte characters
+    let mut it = input.chars().map(|c| {
+        let tmp = idx;
+        idx += c.len_utf8();
+
+        (tmp, c)
+    }).peekable();
 
     while let Some((idx, c)) = it.next() {
         use TokenType::*;
@@ -246,6 +256,26 @@ mod tests {
     #[test]
     fn lex_pitimes() {
         lex_single("○", PiTimes);
+    }
+
+    #[test]
+    fn lex_pitimes_one() {
+        let got = lex("○1");
+        assert_eq!(
+            got,
+            Ok(vec![
+                Token {
+                    variant: PiTimes,
+                    location: 0.."○".len(),
+                    lexeme: "○",
+                },
+                Token {
+                    variant: Number,
+                    location: 3..4,
+                    lexeme: "1",
+                }
+            ])
+        )
     }
 
     #[test]
