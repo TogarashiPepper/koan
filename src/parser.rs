@@ -60,6 +60,12 @@ fn expr_bp<'a>(
                 ..
             },
         ) => Expr::NumLit(x.lexeme.parse().unwrap()), // Ok to unwrap because it's a lexeme
+        Some(Token { lexeme: "(", .. }) => {
+            let lhs = expr_bp(it, 0)?;
+            assert_eq!(it.next().map(|x| x.lexeme), Some(")"));
+
+            lhs
+        }
         Some(x) if x.variant.is_pre_op() => {
             let ((), r_bp) = prefix_binding_power(x.variant);
             let rhs = expr_bp(it, r_bp)?;
@@ -77,14 +83,16 @@ fn expr_bp<'a>(
     };
 
     while let Some(op) = it.peek() {
-        if !op.variant.is_inf_op() {
-            return Err(ParseError::new(ParseErrorType::ExpectedInfixOp));
-        };
-
         // Its okay, tokens are cheap 👍
         let op = op.clone();
 
-        let (l_bp, r_bp) = infix_binding_power(op.variant);
+        let Some((l_bp, r_bp)) = infix_binding_power(op.variant) else {
+            break;
+        };
+
+        if !op.variant.is_inf_op() {
+            return Err(ParseError::new(ParseErrorType::ExpectedInfixOp));
+        };
 
         if l_bp < min_bp {
             break;
@@ -103,8 +111,8 @@ fn expr_bp<'a>(
     Ok(lhs)
 }
 
-fn infix_binding_power(op: TokenType) -> (u8, u8) {
-    match op {
+fn infix_binding_power(op: TokenType) -> Option<(u8, u8)> {
+    Some(match op {
         TokenType::Plus | TokenType::Minus => (3, 4),
         TokenType::Times | TokenType::Slash => (5, 6),
         TokenType::DoubleEqual
@@ -112,8 +120,8 @@ fn infix_binding_power(op: TokenType) -> (u8, u8) {
         | TokenType::GreaterEqual
         | TokenType::Lesser
         | TokenType::LesserEqual => (1, 2),
-        _ => panic!("Expected operator, found some other token"),
-    }
+        _ => return None,
+    })
 }
 
 fn prefix_binding_power(op: TokenType) -> ((), u8) {
@@ -184,6 +192,42 @@ mod tests {
                 }),
                 op: TokenType::Minus,
                 rhs: Box::new(NumLit(3.0)),
+            }),
+        )
+    }
+
+    #[test]
+    fn paren_plus_times() {
+        use Expr::*;
+
+        assert_parse(
+            "(1 + 2) * 3",
+            Ast::Expression(BinOp {
+                lhs: Box::new(BinOp {
+                    lhs: Box::new(NumLit(1.0)),
+                    op: TokenType::Plus,
+                    rhs: Box::new(NumLit(2.0)),
+                }),
+                op: TokenType::Times,
+                rhs: Box::new(NumLit(3.0)),
+            }),
+        )
+    }
+
+    #[test]
+    fn plus_times() {
+        use Expr::*;
+
+        assert_parse(
+            "1 + 2 * 3",
+            Ast::Expression(BinOp {
+                lhs: Box::new(NumLit(1.0)),
+                op: TokenType::Plus,
+                rhs: Box::new(BinOp {
+                    lhs: Box::new(NumLit(2.0)),
+                    op: TokenType::Times,
+                    rhs: Box::new(NumLit(3.0)),
+                }),
             }),
         )
     }
