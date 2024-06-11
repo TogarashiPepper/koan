@@ -4,10 +4,10 @@ use std::{
     str::Chars,
 };
 
+use crate::error::{LexError, KoanError};
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum TokenType {
-    Ident,
-    Number,
+pub enum Operator {
     PiTimes,
     Plus,
     Minus,
@@ -19,28 +19,35 @@ pub enum TokenType {
     GreaterEqual,
     Lesser,
     LesserEqual,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum TokenType {
+    Ident,
+    Number,
+    Op(Operator),
     LParen,
     RParen,
 }
 
-impl TokenType {
+impl Operator {
     pub fn is_inf_op(&self) -> bool {
         matches!(
             self,
-            TokenType::Plus
-                | TokenType::Minus
-                | TokenType::Times
-                | TokenType::Slash
-                | TokenType::DoubleEqual
-                | TokenType::Greater
-                | TokenType::GreaterEqual
-                | TokenType::Lesser
-                | TokenType::LesserEqual
+            Operator::Plus
+                | Operator::Minus
+                | Operator::Times
+                | Operator::Slash
+                | Operator::DoubleEqual
+                | Operator::Greater
+                | Operator::GreaterEqual
+                | Operator::Lesser
+                | Operator::LesserEqual
         )
     }
 
     pub fn is_pre_op(&self) -> bool {
-        matches!(self, TokenType::PiTimes)
+        matches!(self, Operator::PiTimes)
     }
 }
 
@@ -86,7 +93,7 @@ impl<'a> TokenBuilder<'a> {
         iterator: &mut Peekable<Map<Chars, impl FnMut(char) -> (usize, char)>>,
         (first_char, next_char): (char, char),
         (single_char_token, char_pair_token): (Option<TokenType>, TokenType),
-    ) -> Result<TokenBuilder<'a>, LexError> {
+    ) -> Result<TokenBuilder<'a>, KoanError> {
         match iterator.peek() {
             Some((_, peek_char)) if *peek_char == next_char => {
                 iterator.next();
@@ -96,7 +103,7 @@ impl<'a> TokenBuilder<'a> {
             // TODO: probably avoid Some(_) here later on for cases of multi-chars with the same start char
             None | Some(_) => match single_char_token {
                 Some(single_char) => Ok(self.variant(single_char)),
-                None => Err(LexError::PartialMultiCharToken(first_char, next_char)),
+                None => Err(LexError::PartialMultiCharToken(first_char, next_char).into()),
             },
         }
     }
@@ -133,13 +140,7 @@ impl<'a> TokenBuilder<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum LexError {
-    PartialMultiCharToken(char, char),
-    InvalidToken(String),
-}
-
-pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
+pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
     let mut res = vec![];
     let mut idx = 0;
     // Poor man's enumerate that accounts for multi-byte characters
@@ -151,6 +152,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
     }).peekable();
 
     while let Some((idx, c)) = it.next() {
+        use Operator::*;
         use TokenType::*;
 
         if c.is_whitespace() {
@@ -163,16 +165,16 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
 
         // `Builder::build(match { ... })` or `match { ... }.build()` ?
         let token = TokenBuilder::build(match c {
-            '○' => builder.variant(PiTimes),
-            '+' => builder.variant(Plus),
-            '-' => builder.variant(Minus),
-            '*' => builder.variant(Times),
-            '/' => builder.variant(Slash),
+            '○' => builder.variant(Op(PiTimes)),
+            '+' => builder.variant(Op(Plus)),
+            '-' => builder.variant(Op(Minus)),
+            '*' => builder.variant(Op(Times)),
+            '/' => builder.variant(Op(Slash)),
             '(' => builder.variant(LParen),
             ')' => builder.variant(RParen),
-            '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Equal), DoubleEqual))?,
-            '>' => builder.variant_pair(&mut it, ('>', '='), (Some(Greater), GreaterEqual))?,
-            '<' => builder.variant_pair(&mut it, ('<', '='), (Some(Lesser), LesserEqual))?,
+            '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Op(Equal)), Op(DoubleEqual)))?,
+            '>' => builder.variant_pair(&mut it, ('>', '='), (Some(Op(Greater)), Op(GreaterEqual)))?,
+            '<' => builder.variant_pair(&mut it, ('<', '='), (Some(Op(Lesser)), Op(LesserEqual)))?,
             'a'..='z' | 'A'..='Z' | '_' => {
                 let mut end = idx;
                 while let Some((_, k)) = it.peek() {
@@ -219,7 +221,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, LexError> {
             otherwise => {
                 return Err(LexError::InvalidToken(
                     input[idx..idx + otherwise.len_utf8()].to_string(),
-                ))
+                ).into())
             }
         });
 
@@ -234,6 +236,7 @@ mod tests {
     use super::{
         lex, LexError, Token,
         TokenType::{self, *},
+        Operator::*,
     };
 
     fn ok(t: Token<'_>) -> Result<Vec<Token<'_>>, LexError> {
@@ -255,7 +258,7 @@ mod tests {
 
     #[test]
     fn lex_pitimes() {
-        lex_single("○", PiTimes);
+        lex_single("○", Op(PiTimes));
     }
 
     #[test]
@@ -265,7 +268,7 @@ mod tests {
             got,
             Ok(vec![
                 Token {
-                    variant: PiTimes,
+                    variant: Op(PiTimes),
                     location: 0.."○".len(),
                     lexeme: "○",
                 },
@@ -280,39 +283,39 @@ mod tests {
 
     #[test]
     fn lex_plus() {
-        lex_single("+", Plus);
+        lex_single("+", Op(Plus));
     }
 
     #[test]
     fn lex_minus() {
-        lex_single("-", Minus);
+        lex_single("-", Op(Minus));
     }
 
     #[test]
     fn lex_times() {
-        lex_single("*", Times);
+        lex_single("*", Op(Times));
     }
 
     #[test]
     fn lex_slash() {
-        lex_single("/", Slash);
+        lex_single("/", Op(Slash));
     }
 
     #[test]
     fn lex_double_equal() {
-        lex_single("==", DoubleEqual);
+        lex_single("==", Op(DoubleEqual));
     }
 
     #[test]
     fn lex_greater_and_greater_equal() {
-        lex_single(">", Greater);
-        lex_single(">=", GreaterEqual);
+        lex_single(">", Op(Greater));
+        lex_single(">=", Op(GreaterEqual));
     }
 
     #[test]
     fn lex_lesser_and_lesser_equal() {
-        lex_single("<", Lesser);
-        lex_single("<=", LesserEqual);
+        lex_single("<", Op(Lesser));
+        lex_single("<=", Op(LesserEqual));
     }
 
     #[test]
@@ -328,12 +331,12 @@ mod tests {
             got,
             Ok(vec![
                 Token {
-                    variant: DoubleEqual,
+                    variant: Op(DoubleEqual),
                     location: 0..2,
                     lexeme: "==",
                 },
                 Token {
-                    variant: Plus,
+                    variant: Op(Plus),
                     location: 2..3,
                     lexeme: "+",
                 }
@@ -353,7 +356,7 @@ mod tests {
                     lexeme: "1",
                 },
                 Token {
-                    variant: Plus,
+                    variant: Op(Plus),
                     location: 2..3,
                     lexeme: "+",
                 },
@@ -363,7 +366,7 @@ mod tests {
                     lexeme: "2",
                 },
                 Token {
-                    variant: Minus,
+                    variant: Op(Minus),
                     location: 6..7,
                     lexeme: "-",
                 },

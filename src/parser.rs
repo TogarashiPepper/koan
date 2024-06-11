@@ -1,21 +1,9 @@
-use std::{backtrace::Backtrace, iter::Peekable};
+use std::iter::Peekable;
 
-use crate::lexer::{Token, TokenType};
-
-#[derive(Debug)]
-pub struct ParseError(ParseErrorType, Backtrace);
-
-impl ParseError {
-    fn new(variant: ParseErrorType) -> Self {
-        Self(variant, Backtrace::capture())
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum ParseErrorType {
-    ExpectedLiteral(String),
-    ExpectedInfixOp,
-}
+use crate::{
+    error::{KoanError, ParseError},
+    lexer::{Operator, Token, TokenType},
+};
 
 #[derive(Debug, PartialEq)]
 pub enum Ast {
@@ -27,11 +15,11 @@ pub enum Expr {
     // Convert this to BinOp(BinOp) for impls on it?
     BinOp {
         lhs: Box<Expr>,
-        op: TokenType,
+        op: Operator,
         rhs: Box<Expr>,
     },
     PreOp {
-        op: TokenType,
+        op: Operator,
         rhs: Box<Expr>,
     },
     Ident(String),
@@ -39,20 +27,20 @@ pub enum Expr {
     NumLit(f64),
 }
 
-pub fn parse(tokens: Vec<Token<'_>>) -> Result<Ast, ParseError> {
+pub fn parse(tokens: Vec<Token<'_>>) -> Result<Ast, KoanError> {
     let expr = expr(tokens);
 
     Ok(Ast::Expression(expr?))
 }
 
-pub fn expr(tokens: Vec<Token<'_>>) -> Result<Expr, ParseError> {
+pub fn expr(tokens: Vec<Token<'_>>) -> Result<Expr, KoanError> {
     expr_bp(&mut tokens.into_iter().peekable(), 0)
 }
 
 fn expr_bp<'a>(
     it: &mut Peekable<impl Iterator<Item = Token<'a>>>,
     min_bp: u8,
-) -> Result<Expr, ParseError> {
+) -> Result<Expr, KoanError> {
     let mut lhs = match it.next() {
         Some(
             x @ Token {
@@ -66,32 +54,32 @@ fn expr_bp<'a>(
 
             lhs
         }
-        Some(x) if x.variant.is_pre_op() => {
-            let ((), r_bp) = prefix_binding_power(x.variant);
+        Some(Token {
+            variant: TokenType::Op(op),
+            ..
+        }) => {
+            let ((), r_bp) = prefix_binding_power(op);
             let rhs = expr_bp(it, r_bp)?;
 
             Expr::PreOp {
-                op: x.variant,
+                op,
                 rhs: Box::new(rhs),
             }
         }
-        Some(_) | None => {
-            return Err(ParseError::new(ParseErrorType::ExpectedLiteral(
-                "number".to_string(),
-            )))
-        }
+        Some(_) | None => return Err(ParseError::ExpectedLiteral("number".to_string()).into()),
     };
 
-    while let Some(op) = it.peek() {
-        // Its okay, tokens are cheap 👍
-        let op = op.clone();
+    while let Some(Token {
+        variant: TokenType::Op(op),
+        ..
+    }) = it.peek()
+    {
+        let op = *op;
 
-        let Some((l_bp, r_bp)) = infix_binding_power(op.variant) else {
-            break;
-        };
+        let (l_bp, r_bp) = infix_binding_power(op);
 
-        if !op.variant.is_inf_op() {
-            return Err(ParseError::new(ParseErrorType::ExpectedInfixOp));
+        if !op.is_inf_op() {
+            return Err(ParseError::ExpectedInfixOp.into());
         };
 
         if l_bp < min_bp {
@@ -103,7 +91,7 @@ fn expr_bp<'a>(
 
         lhs = Expr::BinOp {
             lhs: Box::new(lhs),
-            op: op.variant,
+            op,
             rhs: Box::new(rhs),
         }
     }
@@ -111,30 +99,32 @@ fn expr_bp<'a>(
     Ok(lhs)
 }
 
-fn infix_binding_power(op: TokenType) -> Option<(u8, u8)> {
-    Some(match op {
-        TokenType::Plus | TokenType::Minus => (3, 4),
-        TokenType::Times | TokenType::Slash => (5, 6),
-        TokenType::DoubleEqual
-        | TokenType::Greater
-        | TokenType::GreaterEqual
-        | TokenType::Lesser
-        | TokenType::LesserEqual => (1, 2),
-        _ => return None,
-    })
+fn infix_binding_power(op: Operator) -> (u8, u8) {
+    use Operator::*;
+
+    if !op.is_inf_op() {
+        panic!("Expected infix op")
+    }
+
+    match op {
+        Plus | Minus => (3, 4),
+        Times | Slash => (5, 6),
+        DoubleEqual | Greater | GreaterEqual | Lesser | LesserEqual => (1, 2),
+        _ => unreachable!(),
+    }
 }
 
-fn prefix_binding_power(op: TokenType) -> ((), u8) {
+fn prefix_binding_power(op: Operator) -> ((), u8) {
     match op {
-        TokenType::PiTimes => ((), 7),
+        Operator::PiTimes => ((), 7),
         _ => panic!("Expected prefix operator, found some other token"),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{lexer::lex, parser::Ast};
     use super::*;
+    use crate::{lexer::lex, parser::Ast};
 
     // `Box::new` is a lot to write across all test cases, and `box` is reserved so while single-char
     // func name is a bit yucky, I think its worth the marginally shorter test cases.
@@ -168,7 +158,7 @@ mod tests {
             "1 + 2",
             BinOp {
                 lhs: b(NumLit(1.0)),
-                op: TokenType::Plus,
+                op: Operator::Plus,
                 rhs: b(NumLit(2.0)),
             },
         )
@@ -181,7 +171,7 @@ mod tests {
         assert_parse_expr(
             "○1",
             PreOp {
-                op: TokenType::PiTimes,
+                op: Operator::PiTimes,
                 rhs: b(NumLit(1.0)),
             },
         )
@@ -196,10 +186,10 @@ mod tests {
             BinOp {
                 lhs: b(BinOp {
                     lhs: b(NumLit(1.0)),
-                    op: TokenType::Plus,
+                    op: Operator::Plus,
                     rhs: b(NumLit(2.0)),
                 }),
-                op: TokenType::Minus,
+                op: Operator::Minus,
                 rhs: b(NumLit(3.0)),
             },
         )
@@ -214,10 +204,10 @@ mod tests {
             BinOp {
                 lhs: b(BinOp {
                     lhs: b(NumLit(1.0)),
-                    op: TokenType::Plus,
+                    op: Operator::Plus,
                     rhs: b(NumLit(2.0)),
                 }),
-                op: TokenType::Times,
+                op: Operator::Times,
                 rhs: b(NumLit(3.0)),
             },
         )
@@ -231,10 +221,10 @@ mod tests {
             "1 + 2 * 3",
             BinOp {
                 lhs: b(NumLit(1.0)),
-                op: TokenType::Plus,
+                op: Operator::Plus,
                 rhs: b(BinOp {
                     lhs: b(NumLit(2.0)),
-                    op: TokenType::Times,
+                    op: Operator::Times,
                     rhs: b(NumLit(3.0)),
                 }),
             },
