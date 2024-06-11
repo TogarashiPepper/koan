@@ -30,6 +30,10 @@ pub enum Expr {
         op: TokenType,
         rhs: Box<Expr>,
     },
+    PreOp {
+        op: TokenType,
+        rhs: Box<Expr>,
+    },
     Ident(String),
     // TODO: Add typed integer literals to avoid JS-esque strangeness
     NumLit(f64),
@@ -56,6 +60,15 @@ fn expr_bp<'a>(
                 ..
             },
         ) => Expr::NumLit(x.lexeme.parse().unwrap()), // Ok to unwrap because it's a lexeme
+        Some(x) if x.variant.is_pre_op() => {
+            let ((), r_bp) = prefix_binding_power(x.variant);
+            let rhs = expr_bp(it, r_bp)?;
+
+            Expr::PreOp {
+                op: x.variant,
+                rhs: Box::new(rhs),
+            }
+        }
         Some(_) | None => {
             return Err(ParseError::new(ParseErrorType::ExpectedLiteral(
                 "number".to_string(),
@@ -103,6 +116,13 @@ fn infix_binding_power(op: TokenType) -> (u8, u8) {
     }
 }
 
+fn prefix_binding_power(op: TokenType) -> ((), u8) {
+    match op {
+        TokenType::PiTimes => ((), 7),
+        _ => panic!("Expected prefix operator, found some other token"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{lexer::lex, parser::Ast};
@@ -133,6 +153,19 @@ mod tests {
                 lhs: Box::new(NumLit(1.0)),
                 op: TokenType::Plus,
                 rhs: Box::new(NumLit(2.0)),
+            }),
+        )
+    }
+
+    #[test]
+    fn simple_preop() {
+        use Expr::*;
+
+        assert_parse(
+            "○1",
+            Ast::Expression(PreOp {
+                op: TokenType::PiTimes,
+                rhs: Box::new(NumLit(1.0)),
             }),
         )
     }
