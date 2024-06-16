@@ -1,5 +1,7 @@
 use std::backtrace::Backtrace;
 
+use crate::lexer::Operator;
+
 #[derive(Debug, PartialEq)]
 pub enum LexError {
     PartialMultiCharToken(char, char),
@@ -12,19 +14,19 @@ pub enum ParseError {
     ExpectedInfixOp,
 }
 
-#[derive(Debug)]
-pub struct KoanError(pub KoanErrorType, pub std::backtrace::Backtrace);
-
-impl PartialEq for KoanError {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
+#[derive(Debug, PartialEq)]
+pub enum InterpreterError {
+    /// 1st parameter is the lhs, 2nd is the rhs.
+    MismatchedTypes(Operator, &'static str, &'static str),
+    MismatchedComparision(&'static str, &'static str),
+    DivByZero,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum KoanErrorType {
     LexErr(LexError),
     ParseErr(ParseError),
+    InterpErr(InterpreterError)
 }
 
 impl From<ParseError> for KoanError {
@@ -36,5 +38,20 @@ impl From<ParseError> for KoanError {
 impl From<LexError> for KoanError {
     fn from(value: LexError) -> Self {
         KoanError(KoanErrorType::LexErr(value), Backtrace::capture())
+    }
+}
+
+impl From<InterpreterError> for KoanError {
+    fn from(value: InterpreterError) -> Self {
+        KoanError(KoanErrorType::InterpErr(value), Backtrace::capture())
+    }
+}
+
+#[derive(Debug)]
+pub struct KoanError(pub KoanErrorType, pub std::backtrace::Backtrace);
+
+impl PartialEq for KoanError {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
     }
 }

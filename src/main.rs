@@ -6,7 +6,7 @@ mod interpreter;
 use crate::{lexer::lex, parser::parse};
 
 fn main() {
-    let input = "1 + 2 - 3";
+    let input = "1 + 2 - 3 * 4 / 5 - 0.6 + ○1";
     let tokens = match lex(input) {
         Ok(list) => list,
         Err(err) => {
@@ -16,5 +16,9 @@ fn main() {
     };
     let ast = parse(tokens).unwrap();
 
-    println!("{:?}", ast);
+    let res = match ast {
+        parser::Ast::Expression(e) => e.eval(),
+    };
+
+    println!("{:?}", res);
 }
