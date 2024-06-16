@@ -7,10 +7,27 @@ use crate::{
 use core::f64;
 use std::ops::{Add, Div, Mul, Sub};
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub enum Value {
     Num(f64),
     UTF8(String),
+}
+
+const COMPARISON_TOLERANCE: f64 = 1e-14;
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Num(l), Value::Num(r)) => {
+                let max = l.abs().max(r.abs());
+                let ct = COMPARISON_TOLERANCE * max;
+
+                (l - r).abs() <= ct
+            },
+            (Value::UTF8(l), Value::UTF8(r)) => l == r,
+            _ => false,
+        }
+    }
 }
 
 impl Value {
@@ -146,7 +163,6 @@ impl Div for Value {
     }
 }
 
-// TODO: https://www.aplwiki.com/wiki/Comparison_tolerance
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {

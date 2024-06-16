@@ -6,7 +6,8 @@ mod interpreter;
 use crate::{lexer::lex, parser::parse};
 
 fn main() {
-    let input = "1 + 2 - 3 * 4 / 5 - 0.6 + ○1";
+    // let input = "1 + 2 - 3 * 4 / 5 - 0.6 + ○1";
+    let input = "0.1 + 0.2 == 0.3";
     let tokens = match lex(input) {
         Ok(list) => list,
         Err(err) => {
