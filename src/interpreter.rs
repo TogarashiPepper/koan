@@ -146,7 +146,7 @@ impl Div for Value {
     }
 }
 
-// TODO: https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
+// TODO: https://www.aplwiki.com/wiki/Comparison_tolerance
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
