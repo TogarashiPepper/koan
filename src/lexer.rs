@@ -28,6 +28,8 @@ pub enum TokenType {
     Op(Operator),
     LParen,
     RParen,
+    Let,
+    Semicolon,
 }
 
 impl Operator {
@@ -172,6 +174,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
             '/' => builder.variant(Op(Slash)),
             '(' => builder.variant(LParen),
             ')' => builder.variant(RParen),
+            ';' => builder.variant(Semicolon),
             '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Op(Equal)), Op(DoubleEqual)))?,
             '>' => builder.variant_pair(&mut it, ('>', '='), (Some(Op(Greater)), Op(GreaterEqual)))?,
             '<' => builder.variant_pair(&mut it, ('<', '='), (Some(Op(Lesser)), Op(LesserEqual)))?,
@@ -187,7 +190,10 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
                     }
                 }
 
-                builder.second(end - idx).variant(TokenType::Ident)
+                builder.second(end - idx).variant(match &input[idx..=end] {
+                    "let" => TokenType::Let,
+                    _ => TokenType::Ident,
+                })
             }
             '0'..='9' => {
                 let mut end = idx;
@@ -233,13 +239,15 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
 
 #[cfg(test)]
 mod tests {
+    use crate::error::KoanError;
+
     use super::{
         lex, LexError, Token,
         TokenType::{self, *},
         Operator::*,
     };
 
-    fn ok(t: Token<'_>) -> Result<Vec<Token<'_>>, LexError> {
+    fn ok(t: Token<'_>) -> Result<Vec<Token<'_>>, KoanError> {
         Ok(vec![t])
     }
 
@@ -397,6 +405,6 @@ mod tests {
     #[test]
     fn lex_invalid_token() {
         let got = lex("~");
-        assert_eq!(got, Err(LexError::InvalidToken("~".to_owned())));
+        assert_eq!(got, Err(LexError::InvalidToken("~".to_owned()).into()));
     }
 }

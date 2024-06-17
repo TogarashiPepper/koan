@@ -1,6 +1,6 @@
 use std::backtrace::Backtrace;
 
-use crate::lexer::Operator;
+use crate::lexer::{Operator, TokenType};
 
 #[derive(Debug, PartialEq)]
 pub enum LexError {
@@ -12,14 +12,16 @@ pub enum LexError {
 pub enum ParseError {
     ExpectedLiteral(String),
     ExpectedInfixOp,
+    ExpectedFoundEof(TokenType),
+    ExpectedFound(TokenType, TokenType),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum InterpreterError {
     /// 1st parameter is the lhs, 2nd is the rhs.
     MismatchedTypes(Operator, &'static str, &'static str),
-    MismatchedComparision(&'static str, &'static str),
     DivByZero,
+    UndefVar(String),
 }
 
 #[derive(Debug, PartialEq)]

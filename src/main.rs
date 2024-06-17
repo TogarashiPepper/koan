@@ -1,13 +1,20 @@
 mod error;
+mod interpreter;
 mod lexer;
 mod parser;
-mod interpreter;
+mod value;
 
-use crate::{lexer::lex, parser::parse};
+use std::collections::HashMap;
+
+use crate::{
+    interpreter::State,
+    lexer::lex,
+    parser::parse,
+    value::Value
+};
 
 fn main() {
-    // let input = "1 + 2 - 3 * 4 / 5 - 0.6 + ○1";
-    let input = "0.1 + 0.2 == 0.3";
+    let input = "let x = 1; let y = 41; x + y";
     let tokens = match lex(input) {
         Ok(list) => list,
         Err(err) => {
@@ -17,9 +24,14 @@ fn main() {
     };
     let ast = parse(tokens).unwrap();
 
-    let res = match ast {
-        parser::Ast::Expression(e) => e.eval(),
+    let mut state = State {
+        variables: HashMap::new(),
     };
 
-    println!("{:?}", res);
+    for statement in ast {
+        let r = statement.eval(&mut state).unwrap();
+        if r != Value::Nothing {
+            println!("{}", r);
+        }
+    }
 }

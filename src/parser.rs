@@ -8,6 +8,7 @@ use crate::{
 #[derive(Debug, PartialEq)]
 pub enum Ast {
     Expression(Expr),
+    LetDecl(String, Expr),
 }
 
 #[derive(Debug, PartialEq)]
@@ -27,14 +28,58 @@ pub enum Expr {
     NumLit(f64),
 }
 
-pub fn parse(tokens: Vec<Token<'_>>) -> Result<Ast, KoanError> {
-    let expr = expr(tokens);
+pub fn parse(tokens: Vec<Token<'_>>) -> Result<Vec<Ast>, KoanError> {
+    let mut it = tokens.into_iter().peekable();
+    let mut program = vec![];
 
-    Ok(Ast::Expression(expr?))
+    while let Some(p) = it.peek() {
+        program.push(match p.variant {
+            TokenType::Let => let_decl(&mut it)?,
+            _ => Ast::Expression(expr_bp(&mut it, 0)?),
+        });
+    }
+
+    Ok(program)
 }
 
-pub fn expr(tokens: Vec<Token<'_>>) -> Result<Expr, KoanError> {
-    expr_bp(&mut tokens.into_iter().peekable(), 0)
+/// Consume the next token, error-ing if the type doesn't match what is expected
+fn expect<'a>(
+    it: &mut Peekable<impl Iterator<Item = Token<'a>>>,
+    ty: TokenType,
+) -> Result<Token<'a>, KoanError> {
+    Err(match it.next() {
+        Some(t) if t.variant == ty => return Ok(t),
+        Some(t) => ParseError::ExpectedFound(ty, t.variant).into(),
+        None => ParseError::ExpectedFoundEof(ty).into(),
+    })
+}
+
+fn multi_expect<'a, const N: usize>(
+    it: &mut Peekable<impl Iterator<Item = Token<'a>>>,
+    tys: &[TokenType; N],
+) -> Result<[Token<'a>; N], KoanError> {
+    let mut res = Vec::with_capacity(N);
+
+    for expected in tys {
+        res.push(expect(it, *expected)?);
+    }
+
+    Ok(res.try_into().unwrap())
+}
+
+fn let_decl<'a>(it: &mut Peekable<impl Iterator<Item = Token<'a>>>) -> Result<Ast, KoanError> {
+    let [_, ident, _] = multi_expect(
+        it,
+        &[
+            TokenType::Let,
+            TokenType::Ident,
+            TokenType::Op(Operator::Equal),
+        ],
+    )?;
+    let body = expr_bp(it, 0)?;
+    let _ = expect(it, TokenType::Semicolon)?;
+
+    Ok(Ast::LetDecl(ident.lexeme.to_owned(), body))
 }
 
 fn expr_bp<'a>(
@@ -48,9 +93,9 @@ fn expr_bp<'a>(
                 ..
             },
         ) => Expr::NumLit(x.lexeme.parse().unwrap()), // Ok to unwrap because it's a lexeme
-        Some(Token { lexeme: "(", .. }) => {
+        Some(Token { variant: TokenType::LParen, .. }) => {
             let lhs = expr_bp(it, 0)?;
-            assert_eq!(it.next().map(|x| x.lexeme), Some(")"));
+            assert_eq!(it.next().map(|x| x.variant), Some(TokenType::RParen));
 
             lhs
         }
@@ -65,6 +110,9 @@ fn expr_bp<'a>(
                 op,
                 rhs: Box::new(rhs),
             }
+        },
+        Some(x @ Token { variant: TokenType::Ident, .. }) => {
+            Expr::Ident(x.lexeme.to_owned())
         }
         Some(_) | None => return Err(ParseError::ExpectedLiteral("number".to_string()).into()),
     };
@@ -148,6 +196,29 @@ mod tests {
         };
 
         assert_eq!(ast, expected);
+    }
+
+    #[test]
+    fn let_declaration() {
+        assert_parse(
+            "let x = 10;",
+            Ast::LetDecl("x".to_string(), Expr::NumLit(10.0)),
+        );
+    }
+
+    #[test]
+    fn let_decl_then_expr() {
+        assert_parse(
+            "let x = 1 + 2;",
+            Ast::LetDecl(
+                "x".to_string(),
+                Expr::BinOp {
+                    lhs: Box::new(Expr::NumLit(1.0)),
+                    op: Operator::Plus,
+                    rhs: Box::new(Expr::NumLit(2.0)),
+                },
+            ),
+        )
     }
 
     #[test]
