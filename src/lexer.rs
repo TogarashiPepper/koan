@@ -1,10 +1,10 @@
 use std::{
-    iter::{Peekable, Map},
+    iter::{Map, Peekable},
     ops::Range,
     str::Chars,
 };
 
-use crate::error::{LexError, KoanError};
+use crate::error::{KoanError, LexError};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Operator {
@@ -30,6 +30,7 @@ pub enum TokenType {
     RParen,
     Let,
     Semicolon,
+    String,
 }
 
 impl Operator {
@@ -146,12 +147,15 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
     let mut res = vec![];
     let mut idx = 0;
     // Poor man's enumerate that accounts for multi-byte characters
-    let mut it = input.chars().map(|c| {
-        let tmp = idx;
-        idx += c.len_utf8();
+    let mut it = input
+        .chars()
+        .map(|c| {
+            let tmp = idx;
+            idx += c.len_utf8();
 
-        (tmp, c)
-    }).peekable();
+            (tmp, c)
+        })
+        .peekable();
 
     while let Some((idx, c)) = it.next() {
         use Operator::*;
@@ -176,8 +180,12 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
             ')' => builder.variant(RParen),
             ';' => builder.variant(Semicolon),
             '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Op(Equal)), Op(DoubleEqual)))?,
-            '>' => builder.variant_pair(&mut it, ('>', '='), (Some(Op(Greater)), Op(GreaterEqual)))?,
-            '<' => builder.variant_pair(&mut it, ('<', '='), (Some(Op(Lesser)), Op(LesserEqual)))?,
+            '>' => {
+                builder.variant_pair(&mut it, ('>', '='), (Some(Op(Greater)), Op(GreaterEqual)))?
+            }
+            '<' => {
+                builder.variant_pair(&mut it, ('<', '='), (Some(Op(Lesser)), Op(LesserEqual)))?
+            }
             'a'..='z' | 'A'..='Z' | '_' => {
                 let mut end = idx;
                 while let Some((_, k)) = it.peek() {
@@ -224,10 +232,31 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
 
                 builder.second(end - idx).variant(TokenType::Number)
             }
+            '"' => {
+                let start = idx + 1;
+                let mut end = idx + 1;
+                it.next();
+
+                for (_, k) in it.by_ref() {
+                    end += 1;
+
+                    if k == '"' {
+                        break;
+                    }
+                }
+
+                res.push(Token {
+                    variant: TokenType::String,
+                    location: start..end,
+                    lexeme: &input[start..end],
+                });
+                continue;
+            }
             otherwise => {
                 return Err(LexError::InvalidToken(
                     input[idx..idx + otherwise.len_utf8()].to_string(),
-                ).into())
+                )
+                .into())
             }
         });
 
@@ -242,9 +271,10 @@ mod tests {
     use crate::error::KoanError;
 
     use super::{
-        lex, LexError, Token,
-        TokenType::{self, *},
+        lex, LexError,
         Operator::*,
+        Token,
+        TokenType::{self, *},
     };
 
     fn ok(t: Token<'_>) -> Result<Vec<Token<'_>>, KoanError> {
@@ -385,6 +415,22 @@ mod tests {
                 }
             ])
         )
+    }
+
+    #[test]
+    fn lex_string() {
+        let input = r#""Hello, World""#;
+        let expected = TokenType::String;
+        let got = lex(input);
+
+        assert_eq!(
+            got,
+            ok(Token {
+                variant: expected,
+                location: 1..13,
+                lexeme: dbg!(&input[1..13])
+            })
+        );
     }
 
     #[test]

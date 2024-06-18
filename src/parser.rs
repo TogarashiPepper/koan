@@ -26,6 +26,7 @@ pub enum Expr {
     Ident(String),
     // TODO: Add typed integer literals to avoid JS-esque strangeness
     NumLit(f64),
+    StrLit(String),
 }
 
 pub fn parse(tokens: Vec<Token<'_>>) -> Result<Vec<Ast>, KoanError> {
@@ -87,13 +88,20 @@ fn expr_bp<'a>(
     min_bp: u8,
 ) -> Result<Expr, KoanError> {
     let mut lhs = match it.next() {
-        Some(
-            x @ Token {
-                variant: TokenType::Number,
-                ..
-            },
-        ) => Expr::NumLit(x.lexeme.parse().unwrap()), // Ok to unwrap because it's a lexeme
-        Some(Token { variant: TokenType::LParen, .. }) => {
+        Some(Token {
+            variant: TokenType::Number,
+            lexeme,
+            ..
+        }) => Expr::NumLit(lexeme.parse().unwrap()), // Ok to unwrap because it's a lexeme
+        Some(Token {
+            variant: TokenType::String,
+            lexeme,
+            ..
+        }) => Expr::StrLit(lexeme.to_owned()),
+        Some(Token {
+            variant: TokenType::LParen,
+            ..
+        }) => {
             let lhs = expr_bp(it, 0)?;
             assert_eq!(it.next().map(|x| x.variant), Some(TokenType::RParen));
 
@@ -110,10 +118,13 @@ fn expr_bp<'a>(
                 op,
                 rhs: Box::new(rhs),
             }
-        },
-        Some(x @ Token { variant: TokenType::Ident, .. }) => {
-            Expr::Ident(x.lexeme.to_owned())
         }
+        Some(
+            x @ Token {
+                variant: TokenType::Ident,
+                ..
+            },
+        ) => Expr::Ident(x.lexeme.to_owned()),
         Some(_) | None => return Err(ParseError::ExpectedLiteral("number".to_string()).into()),
     };
 
@@ -195,7 +206,7 @@ mod tests {
             }
         };
 
-        assert_eq!(ast, expected);
+        assert_eq!(ast[0], expected);
     }
 
     #[test]

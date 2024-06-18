@@ -52,6 +52,7 @@ impl Expr {
                 .get(&ident)
                 .ok_or_else(|| InterpreterError::UndefVar(ident).into())
                 .cloned(),
+            Expr::StrLit(s) => Ok(Value::UTF8(s)),
             Expr::NumLit(n) => Ok(Value::Num(n)),
             Expr::BinOp { .. } => unreachable!(),
             Expr::PreOp { .. } => unreachable!(),
