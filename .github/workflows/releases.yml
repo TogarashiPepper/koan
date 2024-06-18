@@ -16,7 +16,7 @@ jobs:
           - target: x86_64-unknown-linux-musl
             name: koan
           - target: x86-64-apple-darwin
-            name: koan-aarch64-darwin
+            name: koan-x86_64-darwin
     steps:
       - uses: actions/checkout@master
       - uses: actions-rs/toolchain@v1
