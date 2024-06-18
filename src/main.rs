@@ -42,6 +42,7 @@ fn main() {
                 error::InterpreterError::UndefVar(varname) => {
                     format!("Variable `{varname}` is undefined")
                 }
+                error::InterpreterError::MismatchedUnOp(op, ty) => format!("Cannot apply unary operator `{op:?}` for type `{ty}`"),
             },
         };
 

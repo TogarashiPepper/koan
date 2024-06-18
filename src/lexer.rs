@@ -50,7 +50,7 @@ impl Operator {
     }
 
     pub fn is_pre_op(&self) -> bool {
-        matches!(self, Operator::PiTimes)
+        matches!(self, Operator::PiTimes | Operator::Minus)
     }
 }
 

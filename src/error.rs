@@ -22,6 +22,7 @@ pub enum InterpreterError {
     MismatchedTypes(Operator, &'static str, &'static str),
     DivByZero,
     UndefVar(String),
+    MismatchedUnOp(Operator, &'static str),
 }
 
 #[derive(Debug, PartialEq)]

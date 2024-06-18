@@ -175,7 +175,7 @@ fn infix_binding_power(op: Operator) -> (u8, u8) {
 
 fn prefix_binding_power(op: Operator) -> ((), u8) {
     match op {
-        Operator::PiTimes => ((), 7),
+        Operator::PiTimes | Operator::Minus => ((), 7),
         _ => panic!("Expected prefix operator, found some other token"),
     }
 }

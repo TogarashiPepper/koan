@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, Div, Mul, Sub, Neg};
 
 use crate::{
     error::{InterpreterError, KoanError},
@@ -140,5 +140,16 @@ impl Div for Value {
                 .into())
             }
         })
+    }
+}
+
+impl Neg for Value {
+    type Output = Result<Value, KoanError>;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Value::Num(n) => Ok(Value::Num(-n)),
+            t => Err(InterpreterError::MismatchedUnOp(Operator::Minus, t.ty_str()).into())
+        }
     }
 }

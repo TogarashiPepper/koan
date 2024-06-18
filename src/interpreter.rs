@@ -45,6 +45,10 @@ impl Expr {
             },
             Expr::PreOp { op, rhs } if op.is_pre_op() => match op {
                 Operator::PiTimes => rhs.eval(s)? * Value::Num(f64::consts::PI),
+                Operator::Minus => {
+                    let res = rhs.eval(s)?;
+                    -res
+                },
                 _ => unreachable!(),
             },
             Expr::Ident(ident) => s
