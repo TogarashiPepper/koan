@@ -1,13 +1,18 @@
+mod utils;
+
 use std::iter::Peekable;
 
 use crate::{
     error::{KoanError, ParseError},
     lexer::{Operator, Token, TokenType},
+    parser::utils::{expect, multi_expect, check},
 };
 
 #[derive(Debug, PartialEq)]
 pub enum Ast {
     Expression(Expr),
+    Statement(Expr),
+    Block(Vec<Ast>),
     LetDecl(String, Expr),
 }
 
@@ -27,45 +32,93 @@ pub enum Expr {
     // TODO: Add typed integer literals to avoid JS-esque strangeness
     NumLit(f64),
     StrLit(String),
+    FunCall(String, Vec<Expr>),
 }
 
 pub fn parse(tokens: Vec<Token<'_>>) -> Result<Vec<Ast>, KoanError> {
     let mut it = tokens.into_iter().peekable();
+
+    program(&mut it, false)
+}
+
+/// in_block parameter tells the program parser to error, or simply return the ast when it
+/// encounters a `}` character
+fn program<'a>(
+    it: &mut Peekable<impl Iterator<Item = Token<'a>>>,
+    in_block: bool,
+) -> Result<Vec<Ast>, KoanError> {
     let mut program = vec![];
 
     while let Some(p) = it.peek() {
         program.push(match p.variant {
-            TokenType::Let => let_decl(&mut it)?,
-            _ => Ast::Expression(expr_bp(&mut it, 0)?),
+            TokenType::Let => let_decl(it)?,
+            TokenType::RCurly => {
+                if !in_block {
+                    return Err(ParseError::Unexpected(TokenType::RCurly).into());
+                }
+
+                break;
+            }
+            TokenType::LCurly => block(it)?,
+            _ => {
+                let expr = expr_bp(it, 0)?;
+                match check(it, TokenType::Semicolon) {
+                    true => {
+                        it.next();
+                        Ast::Statement(expr)
+                    }
+                    false => Ast::Expression(expr),
+                }
+            }
         });
     }
 
     Ok(program)
 }
 
-/// Consume the next token, error-ing if the type doesn't match what is expected
-fn expect<'a>(
-    it: &mut Peekable<impl Iterator<Item = Token<'a>>>,
-    ty: TokenType,
-) -> Result<Token<'a>, KoanError> {
-    Err(match it.next() {
-        Some(t) if t.variant == ty => return Ok(t),
-        Some(t) => ParseError::ExpectedFound(ty, t.variant).into(),
-        None => ParseError::ExpectedFoundEof(ty).into(),
-    })
+fn block<'a>(it: &mut Peekable<impl Iterator<Item = Token<'a>>>) -> Result<Ast, KoanError> {
+    let _ = expect(it, TokenType::LCurly).and_then(|_| program(it, true));
+    let _ = expect(it, TokenType::RCurly)?;
+
+    Ok(Ast::Block(block))
 }
 
-fn multi_expect<'a, const N: usize>(
+fn fun_call<'a>(
     it: &mut Peekable<impl Iterator<Item = Token<'a>>>,
-    tys: &[TokenType; N],
-) -> Result<[Token<'a>; N], KoanError> {
-    let mut res = Vec::with_capacity(N);
+    ident: String,
+) -> Result<Expr, KoanError> {
+    let _ = expect(it, TokenType::LParen)?;
 
-    for expected in tys {
-        res.push(expect(it, *expected)?);
+    let mut params = vec![];
+
+    loop {
+        match it.peek() {
+            Some(tok) => match tok.variant {
+                TokenType::RParen => {
+                    it.next();
+                    break;
+                }
+                _ => {
+                    let param = expr_bp(it, 0)?;
+                    params.push(param);
+
+                    if let Some(Token {
+                        variant: TokenType::RParen,
+                        ..
+                    }) = it.peek()
+                    {
+                        it.next();
+                        break;
+                    }
+
+                    let _ = expect(it, TokenType::Comma)?;
+                }
+            },
+            None => return Err(ParseError::ExpectedFoundEof(TokenType::RParen).into()),
+        }
     }
 
-    Ok(res.try_into().unwrap())
+    Ok(Expr::FunCall(ident, params))
 }
 
 fn let_decl<'a>(it: &mut Peekable<impl Iterator<Item = Token<'a>>>) -> Result<Ast, KoanError> {
@@ -122,9 +175,16 @@ fn expr_bp<'a>(
         Some(
             x @ Token {
                 variant: TokenType::Ident,
+                lexeme,
                 ..
             },
-        ) => Expr::Ident(x.lexeme.to_owned()),
+        ) => {
+            if let Some(TokenType::LParen) = it.peek().map(|x| x.variant) {
+                fun_call(it, lexeme.to_owned())?
+            } else {
+                Expr::Ident(x.lexeme.to_owned())
+            }
+        }
         Some(_) | None => return Err(ParseError::ExpectedLiteral("number".to_string()).into()),
     };
 
@@ -201,8 +261,7 @@ mod tests {
         let ast = match parse(tokens) {
             Ok(x) => x,
             Err(err) => {
-                eprintln!("error: {:?}\nbacktrace: {}", err.0, err.1);
-                std::process::exit(1)
+                panic!("error: {:?}\nbacktrace: {}", err.0, err.1);
             }
         };
 
@@ -229,6 +288,24 @@ mod tests {
                     rhs: Box::new(Expr::NumLit(2.0)),
                 },
             ),
+        )
+    }
+
+    #[test]
+    fn funcall_nonempty() {
+        assert_parse(
+            "print(1 + 2, 3)",
+            Ast::Expression(Expr::FunCall(
+                "print".to_owned(),
+                vec![
+                    Expr::BinOp {
+                        lhs: Box::new(Expr::NumLit(1.0)),
+                        op: Operator::Plus,
+                        rhs: Box::new(Expr::NumLit(2.0)),
+                    },
+                    Expr::NumLit(3.0),
+                ],
+            )),
         )
     }
 

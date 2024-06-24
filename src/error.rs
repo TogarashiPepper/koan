@@ -14,6 +14,7 @@ pub enum ParseError {
     ExpectedInfixOp,
     ExpectedFoundEof(TokenType),
     ExpectedFound(TokenType, TokenType),
+    Unexpected(TokenType),
 }
 
 #[derive(Debug, PartialEq)]
@@ -23,6 +24,9 @@ pub enum InterpreterError {
     DivByZero,
     UndefVar(String),
     MismatchedUnOp(Operator, &'static str),
+    UndefFunc(String),
+    /// Fields are: name, received arity, expected arity
+    MismatchedArity(String, usize, usize),
 }
 
 #[derive(Debug, PartialEq)]

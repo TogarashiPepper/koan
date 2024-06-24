@@ -2,6 +2,7 @@ mod error;
 mod interpreter;
 mod lexer;
 mod parser;
+mod state;
 mod value;
 
 use std::{collections::HashMap, process::exit};
@@ -10,11 +11,11 @@ use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
 use crate::{
-    error::{KoanError, KoanErrorType, LexError, ParseError},
-    interpreter::State,
+    error::{InterpreterError, KoanError, KoanErrorType, LexError, ParseError},
     lexer::lex,
     parser::parse,
     value::Value,
+    state::State,
 };
 
 fn main() {
@@ -33,16 +34,23 @@ fn main() {
                     format!("Expected `{expected:?}`, found EOF")
                 }
                 ParseError::ExpectedFound(e, f) => format!("Expected `{e:?}`, found `{f:?}`"),
+                ParseError::Unexpected(unexpected) => format!("Unexpected `{unexpected:?}` token found"),
             },
             KoanErrorType::InterpErr(ierr) => match ierr {
-                error::InterpreterError::MismatchedTypes(op, l, r) => {
+                InterpreterError::MismatchedTypes(op, l, r) => {
                     format!("Cannot apply operator `{op:?}` to types `{l}` and `{r}`")
                 }
-                error::InterpreterError::DivByZero => "Attempted to divide by zero".to_owned(),
-                error::InterpreterError::UndefVar(varname) => {
+                InterpreterError::DivByZero => "Attempted to divide by zero".to_owned(),
+                InterpreterError::UndefVar(varname) => {
                     format!("Variable `{varname}` is undefined")
                 }
-                error::InterpreterError::MismatchedUnOp(op, ty) => format!("Cannot apply unary operator `{op:?}` for type `{ty}`"),
+                InterpreterError::MismatchedUnOp(op, ty) => {
+                    format!("Cannot apply unary operator `{op:?}` for type `{ty}`")
+                }
+                InterpreterError::UndefFunc(fnname) => format!("Function `{fnname}` is undefined"),
+                InterpreterError::MismatchedArity(name, got, expected) => {
+                    format!("Function `{name}` got {got} arguments but expected {expected}")
+                }
             },
         };
 
@@ -52,9 +60,7 @@ fn main() {
 }
 
 fn repl() -> Result<(), KoanError> {
-    let mut state = State {
-        variables: HashMap::new(),
-    };
+    let mut state = State::new();
     let mut rl = DefaultEditor::new().unwrap();
 
     loop {

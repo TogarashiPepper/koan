@@ -2,16 +2,11 @@ use crate::{
     error::{InterpreterError, KoanError},
     lexer::Operator,
     parser::{Ast, Expr},
+    state::State,
     value::Value,
 };
 
 use core::f64;
-use std::collections::HashMap;
-
-#[derive(Debug)]
-pub struct State {
-    pub variables: HashMap<String, Value>,
-}
 
 impl Expr {
     pub fn eval(self, s: &mut State) -> Result<Value, KoanError> {
@@ -48,9 +43,10 @@ impl Expr {
                 Operator::Minus => {
                     let res = rhs.eval(s)?;
                     -res
-                },
+                }
                 _ => unreachable!(),
             },
+            Expr::FunCall(name, params) => todo!(),
             Expr::Ident(ident) => s
                 .variables
                 .get(&ident)
@@ -72,6 +68,31 @@ impl Ast {
                 let v = body.eval(s)?;
                 s.variables.insert(ident, v);
                 Ok(Value::Nothing)
+            }
+            Ast::Statement(e) => {
+                let _ = e.eval(s)?;
+                Ok(Value::Nothing)
+            }
+            Ast::Block(mut b) => {
+                let last = b.pop();
+
+                // TODO: make this not absolutely terrible, atm its a performance nightmare
+                // TODO: AND it doesn't work for variable reassignment (once that becomes a thing)
+                // TODO: potential solutions include forcing a let .. in kind of FP-like structure
+                // TODO: or perhaps some kind of more complex scoping solution, learning towards
+                // TODO: former ATM
+                let mut block_state = State {
+                    variables: s.variables.clone()
+                };
+
+                for node in b {
+                    node.eval(&mut block_state)?;
+                }
+
+                Ok(match last {
+                    Some(a) => a.eval(&mut block_state)?,
+                    None => Value::Nothing,
+                })
             }
         }
     }

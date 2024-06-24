@@ -31,6 +31,10 @@ pub enum TokenType {
     Let,
     Semicolon,
     String,
+    Fun,
+    Comma,
+    LCurly,
+    RCurly,
 }
 
 impl Operator {
@@ -179,6 +183,9 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
             '(' => builder.variant(LParen),
             ')' => builder.variant(RParen),
             ';' => builder.variant(Semicolon),
+            ',' => builder.variant(Comma),
+            '{' => builder.variant(LCurly),
+            '}' => builder.variant(RCurly),
             '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Op(Equal)), Op(DoubleEqual)))?,
             '>' => {
                 builder.variant_pair(&mut it, ('>', '='), (Some(Op(Greater)), Op(GreaterEqual)))?
@@ -200,6 +207,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
 
                 builder.second(end - idx).variant(match &input[idx..=end] {
                     "let" => TokenType::Let,
+                    "fun" => TokenType::Fun,
                     _ => TokenType::Ident,
                 })
             }
