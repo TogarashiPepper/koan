@@ -7,7 +7,6 @@ use crate::{
 };
 
 use core::f64;
-use std::collections::HashMap;
 
 impl Expr {
     pub fn eval(self, s: &mut State) -> Result<Value, KoanError> {
@@ -49,10 +48,8 @@ impl Expr {
             },
             Expr::FunCall(name, params) => todo!(),
             Expr::Ident(ident) => s
-                .variables
                 .get(&ident)
-                .ok_or_else(|| InterpreterError::UndefVar(ident).into())
-                .cloned(),
+                .ok_or_else(|| InterpreterError::UndefVar(ident).into()),
             Expr::StrLit(s) => Ok(Value::UTF8(s)),
             Expr::NumLit(n) => Ok(Value::Num(n)),
             Expr::BinOp { .. } => unreachable!(),
@@ -67,7 +64,7 @@ impl Ast {
             Ast::Expression(e) => e.eval(s),
             Ast::LetDecl(ident, body) => {
                 let v = body.eval(s)?;
-                s.variables.insert(ident, v);
+                s.set(ident, v);
                 Ok(Value::Nothing)
             }
             Ast::Statement(e) => {
@@ -75,8 +72,6 @@ impl Ast {
                 Ok(Value::Nothing)
             }
             Ast::Block(mut b) => {
-                let last = b.pop();
-
                 // TODO: make this not absolutely terrible, atm its a performance nightmare
                 // TODO: AND it doesn't work for variable reassignment (once that becomes a thing)
                 // TODO: potential solutions include forcing a let .. in kind of FP-like structure
@@ -84,7 +79,10 @@ impl Ast {
                 // TODO: former ATM
                 let mut block_state = State {
                     variables: s.variables.clone(),
+                    child: Some(Box::new(State::new())),
                 };
+
+                let last = b.pop();
 
                 for node in b {
                     node.eval(&mut block_state)?;
