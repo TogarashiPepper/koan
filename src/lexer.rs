@@ -196,7 +196,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
             'a'..='z' | 'A'..='Z' | '_' => {
                 let mut end = idx;
                 while let Some((_, k)) = it.peek() {
-                    if k.is_alphabetic() || *k == '_' {
+                    if k.is_alphanumeric() || *k == '_' {
                         it.next();
 
                         end += 1;
@@ -305,6 +305,11 @@ mod tests {
     #[test]
     fn lex_pitimes() {
         lex_single("○", Op(PiTimes));
+    }
+
+    #[test]
+    fn lex_ident_p1() {
+        lex_single("p1", Ident);
     }
 
     #[test]

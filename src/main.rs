@@ -5,7 +5,7 @@ mod parser;
 mod state;
 mod value;
 
-use std::{collections::HashMap, process::exit};
+use std::process::exit;
 
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
@@ -14,9 +14,11 @@ use crate::{
     error::{InterpreterError, KoanError, KoanErrorType, LexError, ParseError},
     lexer::lex,
     parser::parse,
-    value::Value,
     state::State,
+    value::Value,
 };
+
+pub type Result<T> = std::result::Result<T, KoanError>;
 
 fn main() {
     if let Err(err) = repl() {
@@ -34,7 +36,9 @@ fn main() {
                     format!("Expected `{expected:?}`, found EOF")
                 }
                 ParseError::ExpectedFound(e, f) => format!("Expected `{e:?}`, found `{f:?}`"),
-                ParseError::Unexpected(unexpected) => format!("Unexpected `{unexpected:?}` token found"),
+                ParseError::Unexpected(unexpected) => {
+                    format!("Unexpected `{unexpected:?}` token found")
+                }
             },
             KoanErrorType::InterpErr(ierr) => match ierr {
                 InterpreterError::MismatchedTypes(op, l, r) => {
@@ -59,7 +63,7 @@ fn main() {
     }
 }
 
-fn repl() -> Result<(), KoanError> {
+fn repl() -> Result<()> {
     let mut state = State::new();
     let mut rl = DefaultEditor::new().unwrap();
 

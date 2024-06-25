@@ -3,9 +3,9 @@ mod utils;
 use std::iter::Peekable;
 
 use crate::{
-    error::{KoanError, ParseError},
+    error::ParseError,
     lexer::{Operator, Token, TokenType},
-    parser::utils::{expect, multi_expect, check},
+    Result,
 };
 
 #[derive(Debug, PartialEq)]
@@ -14,6 +14,11 @@ pub enum Ast {
     Statement(Expr),
     Block(Vec<Ast>),
     LetDecl(String, Expr),
+    FunDecl {
+        name: String,
+        params: Vec<String>,
+        body: Box<Ast>,
+    },
 }
 
 #[derive(Debug, PartialEq)]
@@ -35,187 +40,179 @@ pub enum Expr {
     FunCall(String, Vec<Expr>),
 }
 
-pub fn parse(tokens: Vec<Token<'_>>) -> Result<Vec<Ast>, KoanError> {
-    let mut it = tokens.into_iter().peekable();
+pub fn parse(tokens: Vec<Token<'_>>) -> Result<Vec<Ast>> {
+    let mut it = TokenStream(tokens.into_iter().peekable());
 
-    program(&mut it, false)
+    it.program(false)
 }
 
-/// in_block parameter tells the program parser to error, or simply return the ast when it
-/// encounters a `}` character
-fn program<'a>(
-    it: &mut Peekable<impl Iterator<Item = Token<'a>>>,
-    in_block: bool,
-) -> Result<Vec<Ast>, KoanError> {
-    let mut program = vec![];
+pub struct TokenStream<'a, T: Iterator<Item = Token<'a>>>(Peekable<T>);
 
-    while let Some(p) = it.peek() {
-        program.push(match p.variant {
-            TokenType::Let => let_decl(it)?,
-            TokenType::RCurly => {
-                if !in_block {
-                    return Err(ParseError::Unexpected(TokenType::RCurly).into());
-                }
+impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
+    /// in_block parameter tells the program parser to error, or simply return the ast when it
+    /// encounters a `}` character
+    fn program(&mut self, in_block: bool) -> Result<Vec<Ast>> {
+        let mut program = vec![];
 
-                break;
-            }
-            TokenType::LCurly => block(it)?,
-            _ => {
-                let expr = expr_bp(it, 0)?;
-                match check(it, TokenType::Semicolon) {
-                    true => {
-                        it.next();
-                        Ast::Statement(expr)
+        while let Some(p) = self.0.peek() {
+            program.push(match p.variant {
+                TokenType::Let => self.let_decl()?,
+                TokenType::Fun => self.fun_def()?,
+                TokenType::RCurly => {
+                    if !in_block {
+                        return Err(ParseError::Unexpected(TokenType::RCurly).into());
                     }
-                    false => Ast::Expression(expr),
-                }
-            }
-        });
-    }
 
-    Ok(program)
-}
-
-fn block<'a>(it: &mut Peekable<impl Iterator<Item = Token<'a>>>) -> Result<Ast, KoanError> {
-    let _ = expect(it, TokenType::LCurly).and_then(|_| program(it, true));
-    let _ = expect(it, TokenType::RCurly)?;
-
-    Ok(Ast::Block(block))
-}
-
-fn fun_call<'a>(
-    it: &mut Peekable<impl Iterator<Item = Token<'a>>>,
-    ident: String,
-) -> Result<Expr, KoanError> {
-    let _ = expect(it, TokenType::LParen)?;
-
-    let mut params = vec![];
-
-    loop {
-        match it.peek() {
-            Some(tok) => match tok.variant {
-                TokenType::RParen => {
-                    it.next();
                     break;
                 }
+                TokenType::LCurly => self.block()?,
                 _ => {
-                    let param = expr_bp(it, 0)?;
-                    params.push(param);
-
-                    if let Some(Token {
-                        variant: TokenType::RParen,
-                        ..
-                    }) = it.peek()
-                    {
-                        it.next();
-                        break;
+                    let expr = self.expr_bp(0)?;
+                    match self.check(TokenType::Semicolon) {
+                        true => {
+                            self.0.next();
+                            Ast::Statement(expr)
+                        }
+                        false => Ast::Expression(expr),
                     }
-
-                    let _ = expect(it, TokenType::Comma)?;
                 }
-            },
-            None => return Err(ParseError::ExpectedFoundEof(TokenType::RParen).into()),
+            });
         }
+
+        Ok(program)
     }
 
-    Ok(Expr::FunCall(ident, params))
-}
+    fn block(&mut self) -> Result<Ast> {
+        let _ = self.expect(TokenType::LCurly)?;
+        let block = self.program(true)?;
+        let _ = self.expect(TokenType::RCurly)?;
 
-fn let_decl<'a>(it: &mut Peekable<impl Iterator<Item = Token<'a>>>) -> Result<Ast, KoanError> {
-    let [_, ident, _] = multi_expect(
-        it,
-        &[
+        Ok(Ast::Block(block))
+    }
+
+    fn fun_def(&mut self) -> Result<Ast> {
+        let [_, ident] = self.multi_expect(&[TokenType::Fun, TokenType::Ident])?;
+        let params = self.list(
+            (TokenType::LParen, TokenType::RParen),
+            TokenType::Comma,
+            // list method already peaked b4 calling
+            |stream| {
+                let x = stream.0.next().unwrap();
+                match x.variant {
+                    TokenType::Ident => Ok(x.lexeme.to_owned()),
+                    found => Err(ParseError::ExpectedFound(TokenType::Ident, found).into()),
+                }
+            },
+        )?;
+        let block = self.block()?;
+
+        Ok(Ast::FunDecl {
+            name: ident.lexeme.to_owned(),
+            params,
+            body: Box::new(block),
+        })
+    }
+
+    fn fun_call(&mut self, ident: String) -> Result<Expr> {
+        let params = self.list(
+            (TokenType::LParen, TokenType::RParen),
+            TokenType::Comma,
+            |stream| stream.expr_bp(0),
+        )?;
+
+        Ok(Expr::FunCall(ident, params))
+    }
+
+    fn let_decl(&mut self) -> Result<Ast> {
+        let [_, ident, _] = self.multi_expect(&[
             TokenType::Let,
             TokenType::Ident,
             TokenType::Op(Operator::Equal),
-        ],
-    )?;
-    let body = expr_bp(it, 0)?;
-    let _ = expect(it, TokenType::Semicolon)?;
+        ])?;
+        let body = self.expr_bp(0)?;
+        let _ = self.expect(TokenType::Semicolon)?;
 
-    Ok(Ast::LetDecl(ident.lexeme.to_owned(), body))
-}
+        Ok(Ast::LetDecl(ident.lexeme.to_owned(), body))
+    }
 
-fn expr_bp<'a>(
-    it: &mut Peekable<impl Iterator<Item = Token<'a>>>,
-    min_bp: u8,
-) -> Result<Expr, KoanError> {
-    let mut lhs = match it.next() {
-        Some(Token {
-            variant: TokenType::Number,
-            lexeme,
-            ..
-        }) => Expr::NumLit(lexeme.parse().unwrap()), // Ok to unwrap because it's a lexeme
-        Some(Token {
-            variant: TokenType::String,
-            lexeme,
-            ..
-        }) => Expr::StrLit(lexeme.to_owned()),
-        Some(Token {
-            variant: TokenType::LParen,
-            ..
-        }) => {
-            let lhs = expr_bp(it, 0)?;
-            assert_eq!(it.next().map(|x| x.variant), Some(TokenType::RParen));
+    fn expr_bp(&mut self, min_bp: u8) -> Result<Expr> {
+        let mut lhs = match self.0.next() {
+            Some(Token {
+                variant: TokenType::Number,
+                lexeme,
+                ..
+            }) => Expr::NumLit(lexeme.parse().unwrap()), // Ok to unwrap because it's a lexeme
+            Some(Token {
+                variant: TokenType::String,
+                lexeme,
+                ..
+            }) => Expr::StrLit(lexeme.to_owned()),
+            Some(Token {
+                variant: TokenType::LParen,
+                ..
+            }) => {
+                let lhs = self.expr_bp(0)?;
+                assert_eq!(self.0.next().map(|x| x.variant), Some(TokenType::RParen));
 
-            lhs
-        }
-        Some(Token {
+                lhs
+            }
+            Some(Token {
+                variant: TokenType::Op(op),
+                ..
+            }) => {
+                let ((), r_bp) = prefix_binding_power(op);
+                let rhs = self.expr_bp(r_bp)?;
+
+                Expr::PreOp {
+                    op,
+                    rhs: Box::new(rhs),
+                }
+            }
+            Some(
+                x @ Token {
+                    variant: TokenType::Ident,
+                    lexeme,
+                    ..
+                },
+            ) => {
+                if let Some(TokenType::LParen) = self.0.peek().map(|x| x.variant) {
+                    self.fun_call(lexeme.to_owned())?
+                } else {
+                    Expr::Ident(x.lexeme.to_owned())
+                }
+            }
+            Some(_) | None => return Err(ParseError::ExpectedLiteral("number".to_string()).into()),
+        };
+
+        while let Some(Token {
             variant: TokenType::Op(op),
             ..
-        }) => {
-            let ((), r_bp) = prefix_binding_power(op);
-            let rhs = expr_bp(it, r_bp)?;
+        }) = self.0.peek()
+        {
+            let op = *op;
 
-            Expr::PreOp {
+            let (l_bp, r_bp) = infix_binding_power(op);
+
+            if !op.is_inf_op() {
+                return Err(ParseError::ExpectedInfixOp.into());
+            };
+
+            if l_bp < min_bp {
+                break;
+            }
+
+            self.0.next();
+            let rhs = self.expr_bp(r_bp)?;
+
+            lhs = Expr::BinOp {
+                lhs: Box::new(lhs),
                 op,
                 rhs: Box::new(rhs),
             }
         }
-        Some(
-            x @ Token {
-                variant: TokenType::Ident,
-                lexeme,
-                ..
-            },
-        ) => {
-            if let Some(TokenType::LParen) = it.peek().map(|x| x.variant) {
-                fun_call(it, lexeme.to_owned())?
-            } else {
-                Expr::Ident(x.lexeme.to_owned())
-            }
-        }
-        Some(_) | None => return Err(ParseError::ExpectedLiteral("number".to_string()).into()),
-    };
 
-    while let Some(Token {
-        variant: TokenType::Op(op),
-        ..
-    }) = it.peek()
-    {
-        let op = *op;
-
-        let (l_bp, r_bp) = infix_binding_power(op);
-
-        if !op.is_inf_op() {
-            return Err(ParseError::ExpectedInfixOp.into());
-        };
-
-        if l_bp < min_bp {
-            break;
-        }
-
-        it.next();
-        let rhs = expr_bp(it, r_bp)?;
-
-        lhs = Expr::BinOp {
-            lhs: Box::new(lhs),
-            op,
-            rhs: Box::new(rhs),
-        }
+        Ok(lhs)
     }
-
-    Ok(lhs)
 }
 
 fn infix_binding_power(op: Operator) -> (u8, u8) {
@@ -266,6 +263,30 @@ mod tests {
         };
 
         assert_eq!(ast[0], expected);
+    }
+
+    #[test]
+    fn fun_declaration() {
+        assert_parse(
+            "fun foo(p1, p2, p3) {}",
+            Ast::FunDecl {
+                name: "foo".to_owned(),
+                params: vec!["p1".to_owned(), "p2".to_owned(), "p3".to_owned()],
+                body: Box::new(Ast::Block(vec![])),
+            },
+        )
+    }
+
+    #[test]
+    fn fun_declaration_empty() {
+        assert_parse(
+            "fun foo() {}",
+            Ast::FunDecl {
+                name: "foo".to_owned(),
+                params: vec![],
+                body: Box::new(Ast::Block(vec![])),
+            },
+        )
     }
 
     #[test]

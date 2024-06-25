@@ -7,6 +7,7 @@ use crate::{
 };
 
 use core::f64;
+use std::collections::HashMap;
 
 impl Expr {
     pub fn eval(self, s: &mut State) -> Result<Value, KoanError> {
@@ -82,7 +83,7 @@ impl Ast {
                 // TODO: or perhaps some kind of more complex scoping solution, learning towards
                 // TODO: former ATM
                 let mut block_state = State {
-                    variables: s.variables.clone()
+                    variables: s.variables.clone(),
                 };
 
                 for node in b {
@@ -94,6 +95,7 @@ impl Ast {
                     None => Value::Nothing,
                 })
             }
+            Ast::FunDecl { name, params, body } => todo!(),
         }
     }
 }
