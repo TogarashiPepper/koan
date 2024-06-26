@@ -30,10 +30,16 @@ pub enum InterpreterError {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum CliError {
+    FileError(std::io::ErrorKind)
+}
+
+#[derive(Debug, PartialEq)]
 pub enum KoanErrorType {
     LexErr(LexError),
     ParseErr(ParseError),
-    InterpErr(InterpreterError)
+    InterpErr(InterpreterError),
+    CliErr(CliError)
 }
 
 impl From<ParseError> for KoanError {
@@ -51,6 +57,12 @@ impl From<LexError> for KoanError {
 impl From<InterpreterError> for KoanError {
     fn from(value: InterpreterError) -> Self {
         KoanError(KoanErrorType::InterpErr(value), Backtrace::capture())
+    }
+}
+
+impl From<CliError> for KoanError {
+    fn from(value: CliError) -> Self {
+        KoanError(KoanErrorType::CliErr(value), Backtrace::capture())
     }
 }
 

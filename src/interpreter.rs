@@ -46,7 +46,19 @@ impl Expr {
                 }
                 _ => unreachable!(),
             },
-            Expr::FunCall(name, params) => todo!(),
+            Expr::FunCall(name, params) => {
+                match name.as_str() {
+                    "print" => {
+                        for p in params {
+                            print!("{} ", p.eval(s)?);
+                        }
+                        println!();
+
+                        Ok(Value::Nothing)
+                    },
+                    _ => todo!()
+                }
+            },
             Expr::Ident(ident) => s
                 .get(&ident)
                 .ok_or_else(|| InterpreterError::UndefVar(ident).into()),
