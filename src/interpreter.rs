@@ -7,6 +7,7 @@ use crate::{
 };
 
 use core::f64;
+use std::collections::HashMap;
 
 impl Expr {
     pub fn eval(self, s: &mut State) -> Result<Value, KoanError> {
@@ -46,18 +47,16 @@ impl Expr {
                 }
                 _ => unreachable!(),
             },
-            Expr::FunCall(name, params) => {
-                match name.as_str() {
-                    "print" => {
-                        for p in params {
-                            print!("{} ", p.eval(s)?);
-                        }
-                        println!();
+            Expr::FunCall(name, params) => match name.as_str() {
+                "print" => {
+                    for p in params {
+                        print!("{} ", p.eval(s)?);
+                    }
+                    println!();
 
-                        Ok(Value::Nothing)
-                    },
-                    _ => todo!()
+                    Ok(Value::Nothing)
                 }
+                _ => todo!(),
             },
             Expr::Ident(ident) => s
                 .get(&ident)
@@ -84,24 +83,22 @@ impl Ast {
                 Ok(Value::Nothing)
             }
             Ast::Block(mut b) => {
-                // TODO: make this not absolutely terrible, atm its a performance nightmare
-                // TODO: AND it doesn't work for variable reassignment (once that becomes a thing)
-                // TODO: potential solutions include forcing a let .. in kind of FP-like structure
-                // TODO: or perhaps some kind of more complex scoping solution, learning towards
-                // TODO: former ATM
-                let mut block_state = State {
-                    variables: s.variables.clone(),
-                    child: Some(Box::new(State::new())),
-                };
+                // Enter new scope
+                s.variables.push(HashMap::new());
 
                 let last = b.pop();
 
                 for node in b {
-                    node.eval(&mut block_state)?;
+                    node.eval(s)?;
                 }
 
                 Ok(match last {
-                    Some(a) => a.eval(&mut block_state)?,
+                    Some(a) => {
+                        let res = a.eval(s)?;
+                        s.variables.pop();
+
+                        res
+                    }
                     None => Value::Nothing,
                 })
             }
