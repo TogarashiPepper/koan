@@ -21,6 +21,7 @@ pub enum Operator {
     GreaterEqual,
     Lesser,
     LesserEqual,
+    NotEqual,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -53,6 +54,7 @@ impl Operator {
                 | Operator::Lesser
                 | Operator::LesserEqual
                 | Operator::Power
+                | Operator::NotEqual
         )
     }
 
@@ -180,6 +182,9 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
         let token = TokenBuilder::build(match c {
             '○' => builder.variant(Op(PiTimes)),
             '√' => builder.variant(Op(Sqrt)),
+            '≠' => builder.variant(Op(NotEqual)),
+            '≤' => builder.variant(Op(LesserEqual)),
+            '≥' => builder.variant(Op(GreaterEqual)),
             '^' => builder.variant(Op(Power)),
             '+' => builder.variant(Op(Plus)),
             '-' => builder.variant(Op(Minus)),
@@ -191,6 +196,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
             ',' => builder.variant(Comma),
             '{' => builder.variant(LCurly),
             '}' => builder.variant(RCurly),
+            '!' => builder.variant_pair(&mut it, ('!', '='), (None, Op(NotEqual)))?,
             '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Op(Equal)), Op(DoubleEqual)))?,
             '>' => {
                 builder.variant_pair(&mut it, ('>', '='), (Some(Op(Greater)), Op(GreaterEqual)))?

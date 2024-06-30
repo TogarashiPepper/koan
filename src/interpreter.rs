@@ -37,7 +37,8 @@ impl Expr {
                 Operator::Greater
                 | Operator::GreaterEqual
                 | Operator::Lesser
-                | Operator::LesserEqual => {
+                | Operator::LesserEqual
+                | Operator::NotEqual => {
                     let lhs = lhs.eval(s)?;
                     let rhs = rhs.eval(s)?;
 
@@ -46,6 +47,7 @@ impl Expr {
                         Operator::GreaterEqual => lhs >= rhs,
                         Operator::Lesser => lhs < rhs,
                         Operator::LesserEqual => lhs <= rhs,
+                        Operator::NotEqual => lhs != rhs,
                         _ => unreachable!(),
                     };
 

@@ -226,7 +226,7 @@ fn infix_binding_power(op: Operator) -> (u8, u8) {
         Power => (7, 8),
         Plus | Minus => (3, 4),
         Times | Slash => (5, 6),
-        DoubleEqual | Greater | GreaterEqual | Lesser | LesserEqual => (1, 2),
+        DoubleEqual | Greater | GreaterEqual | Lesser | LesserEqual | NotEqual => (1, 2),
         _ => unreachable!(),
     }
 }
