@@ -9,6 +9,8 @@ use crate::error::{KoanError, LexError};
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Operator {
     PiTimes,
+    Sqrt,
+    Power,
     Plus,
     Minus,
     Times,
@@ -50,11 +52,12 @@ impl Operator {
                 | Operator::GreaterEqual
                 | Operator::Lesser
                 | Operator::LesserEqual
+                | Operator::Power
         )
     }
 
     pub fn is_pre_op(&self) -> bool {
-        matches!(self, Operator::PiTimes | Operator::Minus)
+        matches!(self, Operator::PiTimes | Operator::Minus | Operator::Sqrt)
     }
 }
 
@@ -176,6 +179,8 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
         // `Builder::build(match { ... })` or `match { ... }.build()` ?
         let token = TokenBuilder::build(match c {
             '○' => builder.variant(Op(PiTimes)),
+            '√' => builder.variant(Op(Sqrt)),
+            '^' => builder.variant(Op(Power)),
             '+' => builder.variant(Op(Plus)),
             '-' => builder.variant(Op(Minus)),
             '*' => builder.variant(Op(Times)),

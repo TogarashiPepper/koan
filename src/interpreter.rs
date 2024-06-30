@@ -17,6 +17,20 @@ impl Expr {
                 Operator::Minus => lhs.eval(s)? - rhs.eval(s)?,
                 Operator::Times => lhs.eval(s)? * rhs.eval(s)?,
                 Operator::Slash => lhs.eval(s)? / rhs.eval(s)?,
+                Operator::Power => {
+                    let l = lhs.eval(s)?;
+                    let r = rhs.eval(s)?;
+
+                    match (l, r) {
+                        (Value::Num(ln), Value::Num(rn)) => Ok(Value::Num(ln.powf(rn))),
+                        (l, r) => Err(InterpreterError::MismatchedTypes(
+                            Operator::Power,
+                            l.ty_str(),
+                            r.ty_str(),
+                        )
+                        .into()),
+                    }
+                }
                 Operator::DoubleEqual => {
                     Ok(Value::Num((lhs.eval(s)? == rhs.eval(s)?) as u8 as f64))
                 }
@@ -45,6 +59,18 @@ impl Expr {
                     let res = rhs.eval(s)?;
                     -res
                 }
+                Operator::Sqrt => {
+                    let res = rhs.eval(s)?;
+                    match res {
+                        Value::Num(n) => Ok(Value::Num(n.sqrt())),
+                        invalid => Err(InterpreterError::MismatchedUnOp(
+                            Operator::Sqrt,
+                            invalid.ty_str(),
+                        )
+                        .into()),
+                    }
+                }
+
                 _ => unreachable!(),
             },
             Expr::FunCall(name, params) => match name.as_str() {

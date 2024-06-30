@@ -15,7 +15,7 @@ pub enum Value {
 }
 
 impl Value {
-    fn ty_str(&self) -> &'static str {
+    pub fn ty_str(&self) -> &'static str {
         match self {
             Value::Num(_) => "number",
             Value::UTF8(_) => "string",
