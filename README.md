@@ -5,8 +5,9 @@ This is a simple programming language I'll be working on. The goal is to have fu
 ### Operator precedence
 | Operator(s)                          | L and R binding power     |
 | ------------------------------------ | ------------------------- |
-| `+`, `-`                             | L: `3`, R: `4`            |
+| `^`                                  | L: `7`, R: `8`            |
 | `*`, `/`                             | L: `5`, R: `6`            |
+| `+`, `-`                             | L: `3`, R: `4`            |
 | `==`, `>`, `>=`, `<`, `<=`, and `!=` | L: `1`, R: `2`            |
 
 All of the above operators are binary, but there are also two unary operators. There's unary minus `-` and pitimes `○`, all unary operators have the same precedence and always have higher precedence than binary operators.
@@ -34,3 +35,12 @@ Variable definitions take the form `let name = value;` and are local to the curr
 
 ### Function calls
 Function calls take the form `name(param1, param2, param3)`. The stdlib provides a function named `print`.
+
+### Arrays
+Arrays take the form `[p1, p2, p3]`, trailing commas are permitted. All of the arithmetic operators operate on both arrays and numbers. An example of this behavior is observed in this example:
+
+```js
+let x = [1, 2, 3, 4, 5];
+print(x ^ 2); // Prints [1, 4, 9, 16, 25]
+print(2 ^ x); // Prints [2, 4, 8, 16, 32]
+```
