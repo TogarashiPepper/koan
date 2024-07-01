@@ -1,6 +1,7 @@
 use std::{
     fmt::Write,
     ops::{Add, Div, Mul, Neg, Sub},
+    rc::Rc,
 };
 
 use crate::{error::InterpreterError, lexer::Operator, Result};
@@ -11,7 +12,7 @@ const COMPARISON_TOLERANCE: f64 = 1e-14;
 pub enum Value {
     Num(f64),
     UTF8(String),
-    Array(Vec<Value>),
+    Array(Rc<Vec<Value>>),
     Nothing,
 }
 
@@ -36,7 +37,7 @@ impl Value {
                     .map(|x| f(x.clone()))
                     .collect::<Result<Vec<Self>>>()?;
 
-                Ok(Value::Array(res))
+                Ok(Value::Array(res.into()))
             }
             x => f(x.clone()),
         }
@@ -57,12 +58,12 @@ impl Value {
             (Value::Num(ln), Value::Num(rn)) => Ok(Value::Num(ln.powf(rn))),
             (a @ Value::Array(_), n @ Value::Num(_)) => a.map(|x| x.pow(n.clone())),
             (n @ Value::Num(_), a @ Value::Array(_)) => a.map(|x| n.clone().pow(x)),
-            (l, r) => Err(InterpreterError::MismatchedTypes(
-                Operator::Power,
-                l.ty_str(),
-                r.ty_str(),
-            )
-            .into()),
+            (l, r) => {
+                Err(
+                    InterpreterError::MismatchedTypes(Operator::Power, l.ty_str(), r.ty_str())
+                        .into(),
+                )
+            }
         }
     }
 }

@@ -89,7 +89,8 @@ impl Expr {
             Expr::Array(a) => Ok(Value::Array(
                 a.into_iter()
                     .map(|x| x.eval(s))
-                    .collect::<Result<Vec<Value>, KoanError>>()?,
+                    .collect::<Result<Vec<Value>, KoanError>>()?
+                    .into(),
             )),
             Expr::BinOp { .. } => unreachable!(),
             Expr::PreOp { .. } => unreachable!(),
