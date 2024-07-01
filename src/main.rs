@@ -29,14 +29,12 @@ fn main() {
         if let Err(err) = repl() {
             handle_err(err)
         }
-    }
-    else {
+    } else {
         let path: PathBuf = arg.into();
         if let Err(err) = run_file(path) {
             handle_err(err)
         }
     }
-
 }
 
 // TODO: make this a display impl for KoanError

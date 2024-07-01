@@ -31,7 +31,7 @@ pub enum InterpreterError {
 
 #[derive(Debug, PartialEq)]
 pub enum CliError {
-    FileError(std::io::ErrorKind)
+    FileError(std::io::ErrorKind),
 }
 
 #[derive(Debug, PartialEq)]
@@ -39,7 +39,7 @@ pub enum KoanErrorType {
     LexErr(LexError),
     ParseErr(ParseError),
     InterpErr(InterpreterError),
-    CliErr(CliError)
+    CliErr(CliError),
 }
 
 impl From<ParseError> for KoanError {

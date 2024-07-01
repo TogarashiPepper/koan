@@ -53,7 +53,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                 Some(tok) if tok.variant == delim.1 => {
                     self.0.next();
                     break;
-                },
+                }
                 Some(_) => {
                     let x = func(self)?;
                     xs.push(x);
