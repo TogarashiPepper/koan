@@ -3,13 +3,16 @@ This is a simple programming language I'll be working on. The goal is to have fu
 
 ## Syntax
 ### Operator precedence
-| Operator(s)                | L and R binding power     |
-| -------------------------- | ------------------------- |
-| `+`, `-`                   | L: `3`, R: `4`            |
-| `*`, `/`                   | L: `5`, R: `6`            |
-| `==`, `>`, `>=`, `<`, `<=` | L: `1`, R: `2`            |
+| Operator(s)                          | L and R binding power     |
+| ------------------------------------ | ------------------------- |
+| `+`, `-`                             | L: `3`, R: `4`            |
+| `*`, `/`                             | L: `5`, R: `6`            |
+| `==`, `>`, `>=`, `<`, `<=`, and `!=` | L: `1`, R: `2`            |
 
 All of the above operators are binary, but there are also two unary operators. There's unary minus `-` and pitimes `○`, all unary operators have the same precedence and always have higher precedence than binary operators.
+
+### Unicode
+For the most part, every ascii operator has a unicode equivalent, `>=` may be writen as `≥`, `*` as `×` (note this is not ascii x), `<=` as `≤`, and `!=` as `≠`.
 
 ### Comparision
 All of the comparision operators return `1` for `true` and `0` for `false`. This facilitates easier branchless programming and simplifies the language (if only marginally).
