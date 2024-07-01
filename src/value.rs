@@ -1,9 +1,9 @@
-use std::ops::{Add, Div, Mul, Sub, Neg};
-
-use crate::{
-    error::{InterpreterError, KoanError},
-    lexer::Operator,
+use std::{
+    fmt::Write,
+    ops::{Add, Div, Mul, Neg, Sub},
 };
+
+use crate::{error::InterpreterError, lexer::Operator, Result};
 
 const COMPARISON_TOLERANCE: f64 = 1e-14;
 
@@ -11,6 +11,7 @@ const COMPARISON_TOLERANCE: f64 = 1e-14;
 pub enum Value {
     Num(f64),
     UTF8(String),
+    Array(Vec<Value>),
     Nothing,
 }
 
@@ -20,6 +21,48 @@ impl Value {
             Value::Num(_) => "number",
             Value::UTF8(_) => "string",
             Value::Nothing => "nothing",
+            Value::Array(_) => "array",
+        }
+    }
+
+    pub fn map<F>(&self, mut f: F) -> Result<Self>
+    where
+        F: FnMut(Value) -> Result<Value>,
+    {
+        match self {
+            Value::Array(ls) => {
+                let res = ls
+                    .iter()
+                    .map(|x| f(x.clone()))
+                    .collect::<Result<Vec<Self>>>()?;
+
+                Ok(Value::Array(res))
+            }
+            x => f(x.clone()),
+        }
+    }
+
+    pub fn sqrt(&self) -> Result<Self> {
+        match self {
+            Value::Num(n) => Ok(Value::Num(n.sqrt())),
+            a @ Value::Array(_) => a.map(|x| x.sqrt()),
+            invalid => {
+                Err(InterpreterError::MismatchedUnOp(Operator::Sqrt, invalid.ty_str()).into())
+            }
+        }
+    }
+
+    pub fn pow(self, r: Value) -> Result<Self> {
+        match (self, r) {
+            (Value::Num(ln), Value::Num(rn)) => Ok(Value::Num(ln.powf(rn))),
+            (a @ Value::Array(_), n @ Value::Num(_)) => a.map(|x| x.pow(n.clone())),
+            (n @ Value::Num(_), a @ Value::Array(_)) => a.map(|x| n.clone().pow(x)),
+            (l, r) => Err(InterpreterError::MismatchedTypes(
+                Operator::Power,
+                l.ty_str(),
+                r.ty_str(),
+            )
+            .into()),
         }
     }
 }
@@ -30,6 +73,18 @@ impl std::fmt::Display for Value {
             Value::Num(n) => write!(f, "{}", n),
             Value::UTF8(s) => write!(f, "{}", s),
             Value::Nothing => write!(f, "nothing"),
+            Value::Array(v) => {
+                let mut buf = String::new();
+                write!(buf, "[")?;
+
+                for x in v.iter() {
+                    write!(buf, "{x}, ")?;
+                }
+
+                buf.truncate(buf.len() - 2);
+                write!(buf, "]")?;
+                write!(f, "{}", buf)
+            }
         }
     }
 }
@@ -60,12 +115,18 @@ impl PartialOrd for Value {
 }
 
 impl Add for Value {
-    type Output = Result<Value, KoanError>;
+    type Output = Result<Value>;
 
     fn add(self, rhs: Self) -> Self::Output {
         Ok(match (self, rhs) {
             (Value::Num(l), Value::Num(r)) => Value::Num(l + r),
             (Value::UTF8(l), Value::UTF8(r)) => Value::UTF8(format!("{l}{r}")),
+            (ls @ Value::Array(_), r @ Value::Num(_)) => {
+                return ls.map(|l| l + r.clone());
+            }
+            (l @ Value::Num(_), rs @ Value::Array(_)) => {
+                return rs.map(|r| l.clone() + r);
+            }
             (l, r) => {
                 return Err(InterpreterError::MismatchedTypes(
                     Operator::Plus,
@@ -79,11 +140,17 @@ impl Add for Value {
 }
 
 impl Sub for Value {
-    type Output = Result<Value, KoanError>;
+    type Output = Result<Value>;
 
     fn sub(self, rhs: Self) -> Self::Output {
         Ok(match (self, rhs) {
             (Value::Num(l), Value::Num(r)) => Value::Num(l - r),
+            (ls @ Value::Array(_), r @ Value::Num(_)) => {
+                return ls.map(|l| l - r.clone());
+            }
+            (l @ Value::Num(_), rs @ Value::Array(_)) => {
+                return rs.map(|r| l.clone() - r);
+            }
             (l, r) => {
                 return Err(InterpreterError::MismatchedTypes(
                     Operator::Minus,
@@ -97,7 +164,7 @@ impl Sub for Value {
 }
 
 impl Mul for Value {
-    type Output = Result<Value, KoanError>;
+    type Output = Result<Value>;
 
     fn mul(self, rhs: Self) -> Self::Output {
         Ok(match (self, rhs) {
@@ -106,6 +173,12 @@ impl Mul for Value {
                 let l = l.floor().abs() as usize;
 
                 Value::UTF8(r.repeat(l))
+            }
+            (ls @ Value::Array(_), r @ Value::Num(_)) => {
+                return ls.map(|l| l * r.clone());
+            }
+            (l @ Value::Num(_), rs @ Value::Array(_)) => {
+                return rs.map(|r| l.clone() * r);
             }
             (l, r) => {
                 return Err(InterpreterError::MismatchedTypes(
@@ -120,7 +193,7 @@ impl Mul for Value {
 }
 
 impl Div for Value {
-    type Output = Result<Value, KoanError>;
+    type Output = Result<Value>;
 
     fn div(self, rhs: Self) -> Self::Output {
         Ok(match (self, rhs) {
@@ -130,6 +203,12 @@ impl Div for Value {
                 }
 
                 Value::Num(l / r)
+            }
+            (ls @ Value::Array(_), r @ Value::Num(_)) => {
+                return ls.map(|l| l / r.clone());
+            }
+            (l @ Value::Num(_), rs @ Value::Array(_)) => {
+                return rs.map(|r| l.clone() / r);
             }
             (l, r) => {
                 return Err(InterpreterError::MismatchedTypes(
@@ -144,12 +223,13 @@ impl Div for Value {
 }
 
 impl Neg for Value {
-    type Output = Result<Value, KoanError>;
+    type Output = Result<Value>;
 
     fn neg(self) -> Self::Output {
         match self {
             Value::Num(n) => Ok(Value::Num(-n)),
-            t => Err(InterpreterError::MismatchedUnOp(Operator::Minus, t.ty_str()).into())
+            a @ Value::Array(_) => a.map(Neg::neg),
+            t => Err(InterpreterError::MismatchedUnOp(Operator::Minus, t.ty_str()).into()),
         }
     }
 }

@@ -34,7 +34,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
     pub fn list<F, R>(
         &mut self,
-        delim: (TokenType, TokenType),
+        delim: (Option<TokenType>, TokenType),
         sep: TokenType,
         func: F,
     ) -> Result<Vec<R>>
@@ -42,7 +42,9 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         F: FnMut(&mut TokenStream<'a, T>) -> Result<R>,
     {
         let mut func = func;
-        let _ = self.expect(delim.0)?;
+        if let Some(d) = delim.0 {
+            let _ = self.expect(d)?;
+        }
 
         let mut xs = vec![];
 

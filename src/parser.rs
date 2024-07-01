@@ -38,6 +38,7 @@ pub enum Expr {
     NumLit(f64),
     StrLit(String),
     FunCall(String, Vec<Expr>),
+    Array(Vec<Expr>),
 }
 
 pub fn parse(tokens: Vec<Token<'_>>) -> Result<Vec<Ast>> {
@@ -93,7 +94,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
     fn fun_def(&mut self) -> Result<Ast> {
         let [_, ident] = self.multi_expect(&[TokenType::Fun, TokenType::Ident])?;
         let params = self.list(
-            (TokenType::LParen, TokenType::RParen),
+            (Some(TokenType::LParen), TokenType::RParen),
             TokenType::Comma,
             // list method already peaked b4 calling
             |stream| {
@@ -115,7 +116,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
     fn fun_call(&mut self, ident: String) -> Result<Expr> {
         let params = self.list(
-            (TokenType::LParen, TokenType::RParen),
+            (Some(TokenType::LParen), TokenType::RParen),
             TokenType::Comma,
             |stream| stream.expr_bp(0),
         )?;
@@ -161,6 +162,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                     } else {
                         Expr::Ident(tok.lexeme.to_owned())
                     }
+                }
+                TokenType::LBracket => {
+                    let ls = self.list((None, TokenType::RBracket), TokenType::Comma, |s| {
+                        s.expr_bp(0)
+                    })?;
+
+                    Expr::Array(ls)
                 }
                 _ => return Err(ParseError::ExpectedLiteral("number".to_owned()).into()),
             },

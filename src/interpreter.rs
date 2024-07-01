@@ -21,37 +21,38 @@ impl Expr {
                     let l = lhs.eval(s)?;
                     let r = rhs.eval(s)?;
 
-                    match (l, r) {
-                        (Value::Num(ln), Value::Num(rn)) => Ok(Value::Num(ln.powf(rn))),
-                        (l, r) => Err(InterpreterError::MismatchedTypes(
-                            Operator::Power,
-                            l.ty_str(),
-                            r.ty_str(),
-                        )
-                        .into()),
-                    }
+                    l.pow(r)
                 }
                 Operator::DoubleEqual => {
                     Ok(Value::Num((lhs.eval(s)? == rhs.eval(s)?) as u8 as f64))
                 }
+                Operator::NotEqual => Ok(Value::Num((lhs.eval(s)? != rhs.eval(s)?) as u8 as f64)),
                 Operator::Greater
                 | Operator::GreaterEqual
                 | Operator::Lesser
-                | Operator::LesserEqual
-                | Operator::NotEqual => {
+                | Operator::LesserEqual => {
+                    use std::cmp::PartialOrd;
+
                     let lhs = lhs.eval(s)?;
                     let rhs = rhs.eval(s)?;
 
-                    let r = match op {
-                        Operator::Greater => lhs > rhs,
-                        Operator::GreaterEqual => lhs >= rhs,
-                        Operator::Lesser => lhs < rhs,
-                        Operator::LesserEqual => lhs <= rhs,
-                        Operator::NotEqual => lhs != rhs,
+                    let op = match op {
+                        Operator::Greater => PartialOrd::gt,
+                        Operator::GreaterEqual => PartialOrd::ge,
+                        Operator::Lesser => PartialOrd::lt,
+                        Operator::LesserEqual => PartialOrd::le,
                         _ => unreachable!(),
                     };
 
-                    Ok(Value::Num(r as u8 as f64))
+                    match (lhs, rhs) {
+                        (ls @ Value::Array(_), r @ Value::Num(_)) => {
+                            ls.map(|l| Ok(Value::Num(op(&l, &r) as u8 as f64)))
+                        }
+                        (l @ Value::Num(_), rs @ Value::Array(_)) => {
+                            rs.map(|r| Ok(Value::Num(op(&l, &r) as u8 as f64)))
+                        }
+                        (l, r) => Ok(Value::Num(op(&l, &r) as u8 as f64)),
+                    }
                 }
                 _ => unreachable!(),
             },
@@ -63,14 +64,8 @@ impl Expr {
                 }
                 Operator::Sqrt => {
                     let res = rhs.eval(s)?;
-                    match res {
-                        Value::Num(n) => Ok(Value::Num(n.sqrt())),
-                        invalid => Err(InterpreterError::MismatchedUnOp(
-                            Operator::Sqrt,
-                            invalid.ty_str(),
-                        )
-                        .into()),
-                    }
+
+                    res.sqrt()
                 }
 
                 _ => unreachable!(),
@@ -91,6 +86,11 @@ impl Expr {
                 .ok_or_else(|| InterpreterError::UndefVar(ident).into()),
             Expr::StrLit(s) => Ok(Value::UTF8(s)),
             Expr::NumLit(n) => Ok(Value::Num(n)),
+            Expr::Array(a) => Ok(Value::Array(
+                a.into_iter()
+                    .map(|x| x.eval(s))
+                    .collect::<Result<Vec<Value>, KoanError>>()?,
+            )),
             Expr::BinOp { .. } => unreachable!(),
             Expr::PreOp { .. } => unreachable!(),
         }
