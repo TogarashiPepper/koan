@@ -71,7 +71,7 @@ impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Num(n) => write!(f, "{}", n),
-            Value::UTF8(s) => write!(f, "{}", s),
+            Value::UTF8(s) => write!(f, "{:?}", s),
             Value::Nothing => write!(f, "nothing"),
             Value::Array(v) => {
                 let mut buf = String::new();
