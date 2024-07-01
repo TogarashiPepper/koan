@@ -182,6 +182,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
         let token = TokenBuilder::build(match c {
             '○' => builder.variant(Op(PiTimes)),
             '√' => builder.variant(Op(Sqrt)),
+            '×' => builder.variant(Op(Times)),
             '≠' => builder.variant(Op(NotEqual)),
             '≤' => builder.variant(Op(LesserEqual)),
             '≥' => builder.variant(Op(GreaterEqual)),
