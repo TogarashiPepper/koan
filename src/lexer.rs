@@ -38,6 +38,8 @@ pub enum TokenType {
     Comma,
     LCurly,
     RCurly,
+    LBracket,
+    RBracket,
 }
 
 impl Operator {
@@ -197,6 +199,8 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
             ',' => builder.variant(Comma),
             '{' => builder.variant(LCurly),
             '}' => builder.variant(RCurly),
+            '[' => builder.variant(LBracket),
+            ']' => builder.variant(RBracket),
             '!' => builder.variant_pair(&mut it, ('!', '='), (None, Op(NotEqual)))?,
             '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Op(Equal)), Op(DoubleEqual)))?,
             '>' => {
