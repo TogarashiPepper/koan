@@ -121,10 +121,10 @@ impl Add for Value {
         Ok(match (self, rhs) {
             (Value::Num(l), Value::Num(r)) => Value::Num(l + r),
             (Value::UTF8(l), Value::UTF8(r)) => Value::UTF8(format!("{l}{r}")),
-            (ls @ Value::Array(_), r @ Value::Num(_)) => {
+            (ls @ Value::Array(_), r) => {
                 return ls.map(|l| l + r.clone());
             }
-            (l @ Value::Num(_), rs @ Value::Array(_)) => {
+            (l, rs @ Value::Array(_)) => {
                 return rs.map(|r| l.clone() + r);
             }
             (l, r) => {
@@ -145,10 +145,10 @@ impl Sub for Value {
     fn sub(self, rhs: Self) -> Self::Output {
         Ok(match (self, rhs) {
             (Value::Num(l), Value::Num(r)) => Value::Num(l - r),
-            (ls @ Value::Array(_), r @ Value::Num(_)) => {
+            (ls @ Value::Array(_), r) => {
                 return ls.map(|l| l - r.clone());
             }
-            (l @ Value::Num(_), rs @ Value::Array(_)) => {
+            (l, rs @ Value::Array(_)) => {
                 return rs.map(|r| l.clone() - r);
             }
             (l, r) => {
@@ -174,10 +174,10 @@ impl Mul for Value {
 
                 Value::UTF8(r.repeat(l))
             }
-            (ls @ Value::Array(_), r @ Value::Num(_)) => {
+            (ls @ Value::Array(_), r) => {
                 return ls.map(|l| l * r.clone());
             }
-            (l @ Value::Num(_), rs @ Value::Array(_)) => {
+            (l, rs @ Value::Array(_)) => {
                 return rs.map(|r| l.clone() * r);
             }
             (l, r) => {
@@ -204,10 +204,10 @@ impl Div for Value {
 
                 Value::Num(l / r)
             }
-            (ls @ Value::Array(_), r @ Value::Num(_)) => {
+            (ls @ Value::Array(_), r) => {
                 return ls.map(|l| l / r.clone());
             }
-            (l @ Value::Num(_), rs @ Value::Array(_)) => {
+            (l, rs @ Value::Array(_)) => {
                 return rs.map(|r| l.clone() / r);
             }
             (l, r) => {
