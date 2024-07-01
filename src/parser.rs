@@ -137,60 +137,37 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
     fn expr_bp(&mut self, min_bp: u8) -> Result<Expr> {
         let mut lhs = match self.0.next() {
-            Some(Token {
-                variant: TokenType::Number,
-                lexeme,
-                ..
-            }) => Expr::NumLit(lexeme.parse().unwrap()), // Ok to unwrap because it's a lexeme
-            Some(Token {
-                variant: TokenType::String,
-                lexeme,
-                ..
-            }) => Expr::StrLit(lexeme.to_owned()),
-            Some(Token {
-                variant: TokenType::LParen,
-                ..
-            }) => {
-                let lhs = self.expr_bp(0)?;
-                assert_eq!(self.0.next().map(|x| x.variant), Some(TokenType::RParen));
+            Some(tok) => match tok.variant {
+                TokenType::Number => Expr::NumLit(tok.lexeme.parse().unwrap()), // Ok to unwrap because it's a lexeme
+                TokenType::String => Expr::StrLit(tok.lexeme.to_owned()),
+                TokenType::LParen => {
+                    let lhs = self.expr_bp(0)?;
+                    let _ = self.expect(TokenType::RParen)?;
 
-                lhs
-            }
-            Some(Token {
-                variant: TokenType::Op(op),
-                ..
-            }) => {
-                let ((), r_bp) = prefix_binding_power(op);
-                let rhs = self.expr_bp(r_bp)?;
+                    lhs
+                }
+                TokenType::Op(op) => {
+                    let ((), r_bp) = prefix_binding_power(op);
+                    let rhs = self.expr_bp(r_bp)?;
 
-                Expr::PreOp {
-                    op,
-                    rhs: Box::new(rhs),
+                    Expr::PreOp {
+                        op,
+                        rhs: Box::new(rhs),
+                    }
                 }
-            }
-            Some(
-                x @ Token {
-                    variant: TokenType::Ident,
-                    lexeme,
-                    ..
-                },
-            ) => {
-                if let Some(TokenType::LParen) = self.0.peek().map(|x| x.variant) {
-                    self.fun_call(lexeme.to_owned())?
-                } else {
-                    Expr::Ident(x.lexeme.to_owned())
+                TokenType::Ident => {
+                    if let Some(TokenType::LParen) = self.0.peek().map(|x| x.variant) {
+                        self.fun_call(tok.lexeme.to_owned())?
+                    } else {
+                        Expr::Ident(tok.lexeme.to_owned())
+                    }
                 }
-            }
-            Some(_) | None => return Err(ParseError::ExpectedLiteral("number".to_string()).into()),
+                _ => return Err(ParseError::ExpectedLiteral("number".to_owned()).into()),
+            },
+            None => return Err(ParseError::ExpectedLiteral("number".to_owned()).into()),
         };
 
-        while let Some(Token {
-            variant: TokenType::Op(op),
-            ..
-        }) = self.0.peek()
-        {
-            let op = *op;
-
+        while let Some(TokenType::Op(op)) = self.0.peek().map(|x| x.variant) {
             let (l_bp, r_bp) = infix_binding_power(op);
 
             if !op.is_inf_op() {
