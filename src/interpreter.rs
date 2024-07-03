@@ -27,6 +27,7 @@ impl Expr {
                     Ok(Value::Num((lhs.eval(s)? == rhs.eval(s)?) as u8 as f64))
                 }
                 Operator::NotEqual => Ok(Value::Num((lhs.eval(s)? != rhs.eval(s)?) as u8 as f64)),
+                Operator::DoubleAnd | Operator::DoublePipe => todo!(),
                 Operator::Greater
                 | Operator::GreaterEqual
                 | Operator::Lesser

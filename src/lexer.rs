@@ -22,6 +22,8 @@ pub enum Operator {
     Lesser,
     LesserEqual,
     NotEqual,
+    DoublePipe,
+    DoubleAnd,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -57,6 +59,8 @@ impl Operator {
                 | Operator::LesserEqual
                 | Operator::Power
                 | Operator::NotEqual
+                | Operator::DoubleAnd
+                | Operator::DoublePipe
         )
     }
 
@@ -201,6 +205,8 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
             '}' => builder.variant(RCurly),
             '[' => builder.variant(LBracket),
             ']' => builder.variant(RBracket),
+            '|' => builder.variant_pair(&mut it, ('|', '|'), (None, Op(DoublePipe)))?,
+            '&' => builder.variant_pair(&mut it, ('&', '&'), (None, Op(DoubleAnd)))?,
             '!' => builder.variant_pair(&mut it, ('!', '='), (None, Op(NotEqual)))?,
             '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Op(Equal)), Op(DoubleEqual)))?,
             '>' => {

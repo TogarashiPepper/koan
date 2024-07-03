@@ -208,17 +208,19 @@ fn infix_binding_power(op: Operator) -> (u8, u8) {
     }
 
     match op {
-        Power => (7, 8),
-        Plus | Minus => (3, 4),
-        Times | Slash => (5, 6),
-        DoubleEqual | Greater | GreaterEqual | Lesser | LesserEqual | NotEqual => (1, 2),
+        Power => (11, 12),
+        Times | Slash => (9, 10),
+        Plus | Minus => (7, 8),
+        DoubleEqual | NotEqual => (5, 6),
+        Greater | GreaterEqual | Lesser | LesserEqual => (3, 4),
+        DoublePipe | DoubleAnd => (1, 2),
         _ => unreachable!(),
     }
 }
 
 fn prefix_binding_power(op: Operator) -> ((), u8) {
     match op {
-        Operator::PiTimes | Operator::Minus | Operator::Sqrt => ((), 9),
+        Operator::PiTimes | Operator::Minus | Operator::Sqrt => ((), 13),
         _ => panic!("Expected prefix operator, found some other token"),
     }
 }
