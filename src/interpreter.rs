@@ -1,16 +1,17 @@
 use crate::{
-    error::{InterpreterError, KoanError},
+    error::InterpreterError,
     lexer::Operator,
     parser::{Ast, Expr},
     state::State,
     value::Value,
+    Result,
 };
 
 use core::f64;
 use std::collections::HashMap;
 
 impl Expr {
-    pub fn eval(self, s: &mut State) -> Result<Value, KoanError> {
+    pub fn eval(self, s: &mut State) -> Result<Value> {
         match self {
             Expr::BinOp { lhs, op, rhs } if op.is_inf_op() => match op {
                 Operator::Plus => lhs.eval(s)? + rhs.eval(s)?,
@@ -90,7 +91,7 @@ impl Expr {
             Expr::Array(a) => Ok(Value::Array(
                 a.into_iter()
                     .map(|x| x.eval(s))
-                    .collect::<Result<Vec<Value>, KoanError>>()?
+                    .collect::<Result<Vec<Value>>>()?
                     .into(),
             )),
             Expr::BinOp { .. } => unreachable!(),
@@ -100,7 +101,7 @@ impl Expr {
 }
 
 impl Ast {
-    pub fn eval(self, s: &mut State) -> Result<Value, KoanError> {
+    pub fn eval(self, s: &mut State) -> Result<Value> {
         match self {
             Ast::Expression(e) => e.eval(s),
             Ast::LetDecl(ident, body) => {
@@ -134,5 +135,74 @@ impl Ast {
             }
             Ast::FunDecl { name, params, body } => todo!(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use crate::{lexer::lex, parser::parse, state::State, value::Value};
+
+    fn assert_interp(input: &'static str, expected: Value) {
+        let mut state = State::new();
+        let ast = lex(input).and_then(parse).unwrap().pop().unwrap();
+        let val = ast.eval(&mut state).unwrap();
+
+        assert_eq!(val, expected);
+    }
+
+    #[test]
+    fn binop_nums() {
+        assert_interp("1 + 2 * 2", Value::Num(5.0));
+    }
+
+    #[test]
+    fn binop_num_arr() {
+        assert_interp(
+            "1 + [0, 1, 2]",
+            Value::Array(Rc::new(vec![
+                Value::Num(1.0),
+                Value::Num(2.0),
+                Value::Num(3.0),
+            ])),
+        );
+    }
+
+    #[test]
+    fn unop_arr_num() {
+        assert_interp(
+            "√[4, 9, 25]",
+            Value::Array(Rc::new(vec![
+                Value::Num(2.0),
+                Value::Num(3.0),
+                Value::Num(5.0),
+            ])),
+        );
+    }
+
+    #[test]
+    fn scope_test() {
+        assert_interp(
+            "let x = 10; { let x = 12; { let x = 13; x } }",
+            Value::Num(13.0),
+        );
+    }
+
+    #[test]
+    fn arrlit() {
+        assert_interp(
+            "[1, 2, 3]",
+            Value::Array(Rc::new(vec![
+                Value::Num(1.0),
+                Value::Num(2.0),
+                Value::Num(3.0),
+            ])),
+        );
+    }
+
+    #[test]
+    fn tolerant_comp() {
+        assert_interp("0.1 + 0.2 == 0.3", Value::Num(1.0));
     }
 }

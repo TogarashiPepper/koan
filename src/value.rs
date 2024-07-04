@@ -101,6 +101,7 @@ impl PartialEq for Value {
             }
             (Value::UTF8(l), Value::UTF8(r)) => l == r,
             (Value::Nothing, Value::Nothing) => true,
+            (Value::Array(l), Value::Array(r)) => l == r,
             _ => false,
         }
     }
