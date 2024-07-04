@@ -1,3 +1,5 @@
+use fxhash::FxHashMap;
+
 use crate::{
     error::InterpreterError,
     lexer::Operator,
@@ -8,7 +10,6 @@ use crate::{
 };
 
 use core::f64;
-use std::collections::HashMap;
 
 impl Expr {
     pub fn eval(self, s: &mut State) -> Result<Value> {
@@ -115,7 +116,7 @@ impl Ast {
             }
             Ast::Block(mut b) => {
                 // Enter new scope
-                s.variables.push(HashMap::new());
+                s.variables.push(FxHashMap::default());
 
                 let last = b.pop();
 

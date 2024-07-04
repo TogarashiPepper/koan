@@ -1,16 +1,16 @@
 use crate::value::Value;
-use std::collections::HashMap;
+use fxhash::FxHashMap;
 
 #[derive(Debug)]
 pub struct State {
     // Array of environments, index = depth (i.e. `0` = global scope)
-    pub variables: Vec<HashMap<String, Value>>,
+    pub variables: Vec<FxHashMap<String, Value>>,
 }
 
 impl State {
     pub fn new() -> Self {
         State {
-            variables: vec![HashMap::new()],
+            variables: vec![FxHashMap::default()],
         }
     }
 
