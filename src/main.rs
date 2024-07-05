@@ -1,16 +1,9 @@
-mod error;
-mod interpreter;
-mod lexer;
-mod parser;
-mod state;
-mod value;
-
 use std::{io::stdout, path::PathBuf, process::exit};
 
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
-use crate::{
+use koan::{
     error::{handle_err, CliError, KoanError, Result},
     lexer::lex,
     parser::parse,
