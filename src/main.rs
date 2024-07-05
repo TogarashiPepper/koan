@@ -5,20 +5,18 @@ mod parser;
 mod state;
 mod value;
 
-use std::{path::PathBuf, process::exit};
+use std::{io::stdout, path::PathBuf, process::exit};
 
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
 use crate::{
-    error::{CliError, InterpreterError, KoanError, KoanErrorType, LexError, ParseError},
+    error::{handle_err, CliError, KoanError, Result},
     lexer::lex,
     parser::parse,
     state::State,
     value::Value,
 };
-
-pub type Result<T> = std::result::Result<T, KoanError>;
 
 fn main() {
     let mut arg_it = std::env::args();
@@ -27,66 +25,22 @@ fn main() {
 
     if arg == "repl" {
         if let Err(err) = repl() {
-            handle_err(err)
+            handle_err(err);
+            exit(1);
         }
     } else {
         let path: PathBuf = arg.into();
         if let Err(err) = run_file(path) {
-            handle_err(err)
+            handle_err(err);
+            exit(1);
         }
     }
-}
-
-// TODO: make this a display impl for KoanError
-fn handle_err(err: KoanError) -> ! {
-    let err_string = match err.0 {
-        KoanErrorType::LexErr(lerr) => match lerr {
-            LexError::PartialMultiCharToken(f, s) => {
-                format!("Expected token `{s}` after `{f}`")
-            }
-            LexError::InvalidToken(tok) => format!("Character `{tok}` is not a valid token"),
-        },
-        KoanErrorType::ParseErr(perr) => match perr {
-            ParseError::ExpectedLiteral(ty) => format!("Expected literal of type `{ty}`"),
-            ParseError::ExpectedInfixOp => "Expected infix operator".to_owned(),
-            ParseError::ExpectedFoundEof(expected) => {
-                format!("Expected `{expected:?}`, found EOF")
-            }
-            ParseError::ExpectedFound(e, f) => format!("Expected `{e:?}`, found `{f:?}`"),
-            ParseError::Unexpected(unexpected) => {
-                format!("Unexpected `{unexpected:?}` token found")
-            }
-        },
-        KoanErrorType::InterpErr(ierr) => match ierr {
-            InterpreterError::MismatchedTypes(op, l, r) => {
-                format!("Cannot apply operator `{op:?}` to types `{l}` and `{r}`")
-            }
-            InterpreterError::DivByZero => "Attempted to divide by zero".to_owned(),
-            InterpreterError::UndefVar(varname) => {
-                format!("Variable `{varname}` is undefined")
-            }
-            InterpreterError::MismatchedUnOp(op, ty) => {
-                format!("Cannot apply unary operator `{op:?}` for type `{ty}`")
-            }
-            InterpreterError::UndefFunc(fnname) => format!("Function `{fnname}` is undefined"),
-            InterpreterError::MismatchedArity(name, got, expected) => {
-                format!("Function `{name}` got {got} arguments but expected {expected}")
-            }
-        },
-        KoanErrorType::CliErr(cerr) => match cerr {
-            CliError::FileError(ioerr) => {
-                format!("Got error kind `{ioerr}` when trying to read file")
-            }
-        },
-    };
-
-    eprintln!("{err_string}");
-    exit(1);
 }
 
 fn repl() -> Result<()> {
     let mut state = State::new();
     let mut rl = DefaultEditor::new().unwrap();
+    let mut stdout = stdout().lock();
 
     loop {
         let line = match rl.readline("λ ") {
@@ -109,7 +63,7 @@ fn repl() -> Result<()> {
         let ast = parse(tokens)?;
 
         for statement in ast {
-            let r = statement.eval(&mut state)?;
+            let r = statement.eval(&mut state, &mut stdout)?;
             if r != Value::Nothing {
                 println!("{}", r);
             }
@@ -121,12 +75,13 @@ fn run_file(path: PathBuf) -> Result<()> {
     let file = std::fs::read_to_string(path)
         .map_err(|err| KoanError::from(CliError::FileError(err.kind())))?;
     let mut state = State::new();
+    let mut stdout = stdout().lock();
 
     let tokens = lex(&file)?;
     let ast = parse(tokens)?;
 
     for statement in ast {
-        let _ = statement.eval(&mut state)?;
+        let _ = statement.eval(&mut state, &mut stdout)?;
     }
 
     Ok(())

@@ -1,34 +1,36 @@
 use fxhash::FxHashMap;
 
 use crate::{
-    error::InterpreterError,
+    error::{InterpreterError, Result},
     lexer::Operator,
     parser::{Ast, Expr},
     state::State,
     value::Value,
-    Result,
 };
 
 use core::f64;
+use std::io::Write;
 
 impl Expr {
-    pub fn eval(self, s: &mut State) -> Result<Value> {
+    pub fn eval<T: Write>(self, s: &mut State, out: &mut T) -> Result<Value> {
         match self {
             Expr::BinOp { lhs, op, rhs } if op.is_inf_op() => match op {
-                Operator::Plus => lhs.eval(s)? + rhs.eval(s)?,
-                Operator::Minus => lhs.eval(s)? - rhs.eval(s)?,
-                Operator::Times => lhs.eval(s)? * rhs.eval(s)?,
-                Operator::Slash => lhs.eval(s)? / rhs.eval(s)?,
+                Operator::Plus => lhs.eval(s, out)? + rhs.eval(s, out)?,
+                Operator::Minus => lhs.eval(s, out)? - rhs.eval(s, out)?,
+                Operator::Times => lhs.eval(s, out)? * rhs.eval(s, out)?,
+                Operator::Slash => lhs.eval(s, out)? / rhs.eval(s, out)?,
                 Operator::Power => {
-                    let l = lhs.eval(s)?;
-                    let r = rhs.eval(s)?;
+                    let l = lhs.eval(s, out)?;
+                    let r = rhs.eval(s, out)?;
 
                     l.pow(r)
                 }
-                Operator::DoubleEqual => {
-                    Ok(Value::Num((lhs.eval(s)? == rhs.eval(s)?) as u8 as f64))
-                }
-                Operator::NotEqual => Ok(Value::Num((lhs.eval(s)? != rhs.eval(s)?) as u8 as f64)),
+                Operator::DoubleEqual => Ok(Value::Num(
+                    (lhs.eval(s, out)? == rhs.eval(s, out)?) as u8 as f64,
+                )),
+                Operator::NotEqual => Ok(Value::Num(
+                    (lhs.eval(s, out)? != rhs.eval(s, out)?) as u8 as f64,
+                )),
                 Operator::DoubleAnd | Operator::DoublePipe => todo!(),
                 Operator::Greater
                 | Operator::GreaterEqual
@@ -36,8 +38,8 @@ impl Expr {
                 | Operator::LesserEqual => {
                     use std::cmp::PartialOrd;
 
-                    let lhs = lhs.eval(s)?;
-                    let rhs = rhs.eval(s)?;
+                    let lhs = lhs.eval(s, out)?;
+                    let rhs = rhs.eval(s, out)?;
 
                     let op = match op {
                         Operator::Greater => PartialOrd::gt,
@@ -60,13 +62,13 @@ impl Expr {
                 _ => unreachable!(),
             },
             Expr::PreOp { op, rhs } if op.is_pre_op() => match op {
-                Operator::PiTimes => rhs.eval(s)? * Value::Num(f64::consts::PI),
+                Operator::PiTimes => rhs.eval(s, out)? * Value::Num(f64::consts::PI),
                 Operator::Minus => {
-                    let res = rhs.eval(s)?;
+                    let res = rhs.eval(s, out)?;
                     -res
                 }
                 Operator::Sqrt => {
-                    let res = rhs.eval(s)?;
+                    let res = rhs.eval(s, out)?;
 
                     res.sqrt()
                 }
@@ -76,9 +78,10 @@ impl Expr {
             Expr::FunCall(name, params) => match name.as_str() {
                 "print" => {
                     for p in params {
-                        print!("{} ", p.eval(s)?);
+                        let v = p.eval(s, out)?;
+                        write!(out, "{v} ").unwrap();
                     }
-                    println!();
+                    writeln!(out).unwrap();
 
                     Ok(Value::Nothing)
                 }
@@ -91,7 +94,7 @@ impl Expr {
             Expr::NumLit(n) => Ok(Value::Num(n)),
             Expr::Array(a) => Ok(Value::Array(
                 a.into_iter()
-                    .map(|x| x.eval(s))
+                    .map(|x| x.eval(s, out))
                     .collect::<Result<Vec<Value>>>()?
                     .into(),
             )),
@@ -102,16 +105,16 @@ impl Expr {
 }
 
 impl Ast {
-    pub fn eval(self, s: &mut State) -> Result<Value> {
+    pub fn eval<T: Write>(self, s: &mut State, out: &mut T) -> Result<Value> {
         match self {
-            Ast::Expression(e) => e.eval(s),
+            Ast::Expression(e) => e.eval(s, out),
             Ast::LetDecl(ident, body) => {
-                let v = body.eval(s)?;
+                let v = body.eval(s, out)?;
                 s.set(ident, v);
                 Ok(Value::Nothing)
             }
             Ast::Statement(e) => {
-                let _ = e.eval(s)?;
+                let _ = e.eval(s, out)?;
                 Ok(Value::Nothing)
             }
             Ast::Block(mut b) => {
@@ -121,12 +124,12 @@ impl Ast {
                 let last = b.pop();
 
                 for node in b {
-                    node.eval(s)?;
+                    node.eval(s, out)?;
                 }
 
                 Ok(match last {
                     Some(a) => {
-                        let res = a.eval(s)?;
+                        let res = a.eval(s, out)?;
                         s.variables.pop();
 
                         res
@@ -141,14 +144,15 @@ impl Ast {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
+    use std::{io::stdout, rc::Rc};
 
     use crate::{lexer::lex, parser::parse, state::State, value::Value};
 
     fn assert_interp(input: &'static str, expected: Value) {
         let mut state = State::new();
+        let mut stdout = stdout().lock();
         let ast = lex(input).and_then(parse).unwrap().pop().unwrap();
-        let val = ast.eval(&mut state).unwrap();
+        let val = ast.eval(&mut state, &mut stdout).unwrap();
 
         assert_eq!(val, expected);
     }

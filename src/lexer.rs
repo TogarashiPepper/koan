@@ -4,7 +4,7 @@ use std::{
     str::Chars,
 };
 
-use crate::error::{KoanError, LexError};
+use crate::error::{LexError, Result};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Operator {
@@ -111,7 +111,7 @@ impl<'a> TokenBuilder<'a> {
         iterator: &mut Peekable<Map<Chars, impl FnMut(char) -> (usize, char)>>,
         (first_char, next_char): (char, char),
         (single_char_token, char_pair_token): (Option<TokenType>, TokenType),
-    ) -> Result<TokenBuilder<'a>, KoanError> {
+    ) -> Result<TokenBuilder<'a>> {
         match iterator.peek() {
             Some((_, peek_char)) if *peek_char == next_char => {
                 iterator.next();
@@ -158,7 +158,7 @@ impl<'a> TokenBuilder<'a> {
     }
 }
 
-pub fn lex(input: &str) -> Result<Vec<Token<'_>>, KoanError> {
+pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
     let mut res = vec![];
     let mut idx = 0;
     // Poor man's enumerate that accounts for multi-byte characters

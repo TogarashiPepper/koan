@@ -4,7 +4,10 @@ use std::{
     rc::Rc,
 };
 
-use crate::{error::InterpreterError, lexer::Operator, Result};
+use crate::{
+    error::{InterpreterError, Result},
+    lexer::Operator,
+};
 
 const COMPARISON_TOLERANCE: f64 = 1e-14;
 

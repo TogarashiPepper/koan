@@ -1,8 +1,7 @@
 use crate::{
-    error::ParseError,
+    error::{ParseError, Result},
     lexer::{Token, TokenType},
     parser::TokenStream,
-    Result,
 };
 
 impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {

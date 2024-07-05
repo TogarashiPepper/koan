@@ -3,9 +3,8 @@ mod utils;
 use std::iter::Peekable;
 
 use crate::{
-    error::ParseError,
+    error::{ParseError, Result},
     lexer::{Operator, Token, TokenType},
-    Result,
 };
 
 #[derive(Debug, PartialEq)]
