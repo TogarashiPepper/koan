@@ -1,14 +1,10 @@
 use std::{io::stdout, path::PathBuf, process::exit};
 
-use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
-
 use koan::{
     error::{handle_err, CliError, KoanError, Result},
     lexer::lex,
     parser::parse,
     state::State,
-    value::Value,
 };
 
 fn main() {
@@ -17,6 +13,7 @@ fn main() {
     let arg = arg_it.next().unwrap_or_else(|| "repl".to_owned());
 
     if arg == "repl" {
+        #[cfg(feature = "repl")]
         if let Err(err) = repl() {
             handle_err(err);
             exit(1);
@@ -30,7 +27,12 @@ fn main() {
     }
 }
 
+#[cfg(feature = "repl")]
 fn repl() -> Result<()> {
+    use rustyline::error::ReadlineError;
+    use rustyline::DefaultEditor;
+    use koan::value::Value;
+
     let mut state = State::new();
     let mut rl = DefaultEditor::new().unwrap();
     let mut stdout = stdout().lock();
