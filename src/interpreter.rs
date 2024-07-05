@@ -1,4 +1,4 @@
-use fxhash::FxHashMap;
+use std::collections::HashMap;
 
 use crate::{
     error::{InterpreterError, Result},
@@ -50,6 +50,9 @@ impl Expr {
                     };
 
                     match (lhs, rhs) {
+                        (l @ Value::Array(_), Value::Array(r)) => {
+                            l.zip(r, |l, r| Ok(Value::Num(op(&l, &r) as u8 as f64)))
+                        }
                         (ls @ Value::Array(_), r @ Value::Num(_)) => {
                             ls.map(|l| Ok(Value::Num(op(&l, &r) as u8 as f64)))
                         }
@@ -119,7 +122,7 @@ impl Ast {
             }
             Ast::Block(mut b) => {
                 // Enter new scope
-                s.variables.push(FxHashMap::default());
+                s.variables.push(HashMap::new());
 
                 let last = b.pop();
 

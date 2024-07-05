@@ -46,6 +46,27 @@ impl Value {
         }
     }
 
+    pub fn zip<F>(&self, rhs: Rc<Vec<Value>>, mut op: F) -> Result<Self>
+    where
+        F: FnMut(Value, Value) -> Result<Value>,
+    {
+        match self {
+            Value::Array(left) => {
+                if left.len() != rhs.len() {
+                    return Err(InterpreterError::BinOpArrInvalidLength.into());
+                }
+
+                let mut res = vec![];
+                for (l, r) in left.iter().zip(rhs.iter()) {
+                    res.push(op(l.clone(), r.clone())?);
+                }
+
+                Ok(Value::Array(Rc::new(res)))
+            }
+            _ => unreachable!(),
+        }
+    }
+
     pub fn sqrt(&self) -> Result<Self> {
         match self {
             Value::Num(n) => Ok(Value::Num(n.sqrt())),
@@ -61,6 +82,7 @@ impl Value {
             (Value::Num(ln), Value::Num(rn)) => Ok(Value::Num(ln.powf(rn))),
             (a @ Value::Array(_), n @ Value::Num(_)) => a.map(|x| x.pow(n.clone())),
             (n @ Value::Num(_), a @ Value::Array(_)) => a.map(|x| n.clone().pow(x)),
+            (l @ Value::Array(_), Value::Array(r)) => l.zip(r, Value::pow),
             (l, r) => {
                 Err(
                     InterpreterError::MismatchedTypes(Operator::Power, l.ty_str(), r.ty_str())
@@ -126,6 +148,7 @@ impl Add for Value {
         Ok(match (self, rhs) {
             (Value::Num(l), Value::Num(r)) => Value::Num(l + r),
             (Value::UTF8(l), Value::UTF8(r)) => Value::UTF8(format!("{l}{r}")),
+            (l @ Value::Array(_), Value::Array(r)) => l.zip(r, Value::add)?,
             (ls @ Value::Array(_), r) => {
                 return ls.map(|l| l + r.clone());
             }
@@ -150,6 +173,7 @@ impl Sub for Value {
     fn sub(self, rhs: Self) -> Self::Output {
         Ok(match (self, rhs) {
             (Value::Num(l), Value::Num(r)) => Value::Num(l - r),
+            (l @ Value::Array(_), Value::Array(r)) => l.zip(r, Value::sub)?,
             (ls @ Value::Array(_), r) => {
                 return ls.map(|l| l - r.clone());
             }
@@ -174,6 +198,7 @@ impl Mul for Value {
     fn mul(self, rhs: Self) -> Self::Output {
         Ok(match (self, rhs) {
             (Value::Num(l), Value::Num(r)) => Value::Num(l * r),
+            (l @ Value::Array(_), Value::Array(r)) => l.zip(r, Value::mul)?,
             (Value::Num(l), Value::UTF8(r)) | (Value::UTF8(r), Value::Num(l)) => {
                 let l = l.floor().abs() as usize;
 
@@ -202,6 +227,7 @@ impl Div for Value {
 
     fn div(self, rhs: Self) -> Self::Output {
         Ok(match (self, rhs) {
+            (l @ Value::Array(_), Value::Array(r)) => l.zip(r, Value::mul)?,
             (Value::Num(l), Value::Num(r)) => {
                 if r == 0.0 {
                     return Err(InterpreterError::DivByZero.into());

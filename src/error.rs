@@ -29,6 +29,7 @@ pub enum InterpreterError {
     UndefFunc(String),
     /// Fields are: name, received arity, expected arity
     MismatchedArity(String, usize, usize),
+    BinOpArrInvalidLength
 }
 
 #[derive(Debug, PartialEq)]
@@ -111,6 +112,7 @@ pub fn handle_err(err: KoanError) -> String {
             InterpreterError::MismatchedArity(name, got, expected) => {
                 format!("Function `{name}` got {got} arguments but expected {expected}")
             }
+            InterpreterError::BinOpArrInvalidLength => "Binary Operations on arrays must be on two arrays of equal length".to_string(),
         },
         KoanErrorType::CliErr(cerr) => match cerr {
             CliError::FileError(ioerr) => {
