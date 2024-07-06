@@ -15,13 +15,13 @@ fn main() {
     if arg == "repl" {
         #[cfg(feature = "repl")]
         if let Err(err) = repl() {
-            handle_err(err);
+            eprintln!("{}", handle_err(err));
             exit(1);
         }
     } else {
         let path: PathBuf = arg.into();
         if let Err(err) = run_file(path) {
-            handle_err(err);
+            eprintln!("{}", handle_err(err));
             exit(1);
         }
     }
