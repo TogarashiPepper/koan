@@ -1,6 +1,6 @@
 use std::{
     fmt::Write,
-    ops::{Add, Div, Mul, Neg, Sub},
+    ops::{Add, Div, Mul, Neg, Not, Sub},
     rc::Rc,
 };
 
@@ -261,6 +261,22 @@ impl Neg for Value {
             Value::Num(n) => Ok(Value::Num(-n)),
             a @ Value::Array(_) => a.map(Neg::neg),
             t => Err(InterpreterError::MismatchedUnOp(Operator::Minus, t.ty_str()).into()),
+        }
+    }
+}
+
+impl Not for Value {
+    type Output = Result<Value>;
+
+    fn not(self) -> Self::Output {
+        match self {
+            n @ Value::Num(_) => Ok(if n == Value::Num(0.0) {
+                Value::Num(1.0)
+            } else {
+                Value::Num(0.0)
+            }),
+            a @ Value::Array(_) => a.map(Value::not),
+            v => Err(InterpreterError::MismatchedUnOp(Operator::Not, v.ty_str()).into()),
         }
     }
 }

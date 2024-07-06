@@ -24,6 +24,7 @@ pub enum Operator {
     NotEqual,
     DoublePipe,
     DoubleAnd,
+    Not,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -65,7 +66,10 @@ impl Operator {
     }
 
     pub fn is_pre_op(&self) -> bool {
-        matches!(self, Operator::PiTimes | Operator::Minus | Operator::Sqrt)
+        matches!(
+            self,
+            Operator::PiTimes | Operator::Minus | Operator::Sqrt | Operator::Not
+        )
     }
 }
 
@@ -207,7 +211,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
             ']' => builder.variant(RBracket),
             '|' => builder.variant_pair(&mut it, ('|', '|'), (None, Op(DoublePipe)))?,
             '&' => builder.variant_pair(&mut it, ('&', '&'), (None, Op(DoubleAnd)))?,
-            '!' => builder.variant_pair(&mut it, ('!', '='), (None, Op(NotEqual)))?,
+            '!' => builder.variant_pair(&mut it, ('!', '='), (Some(Op(Not)), Op(NotEqual)))?,
             '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Op(Equal)), Op(DoubleEqual)))?,
             '>' => {
                 builder.variant_pair(&mut it, ('>', '='), (Some(Op(Greater)), Op(GreaterEqual)))?

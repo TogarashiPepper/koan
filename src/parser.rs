@@ -219,7 +219,7 @@ fn infix_binding_power(op: Operator) -> (u8, u8) {
 
 fn prefix_binding_power(op: Operator) -> ((), u8) {
     match op {
-        Operator::PiTimes | Operator::Minus | Operator::Sqrt => ((), 13),
+        Operator::PiTimes | Operator::Minus | Operator::Sqrt | Operator::Not => ((), 13),
         _ => panic!("Expected prefix operator, found some other token"),
     }
 }

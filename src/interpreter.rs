@@ -75,7 +75,11 @@ impl Expr {
 
                     res.sqrt()
                 }
+                Operator::Not => {
+                    let res = rhs.eval(s, out)?;
 
+                    !res
+                }
                 _ => unreachable!(),
             },
             Expr::FunCall(name, params) => match name.as_str() {
