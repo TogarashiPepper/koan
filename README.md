@@ -12,7 +12,7 @@ This is a simple programming language I'll be working on. The goal is to have fu
 | `>`, `>=`, `<`, and `<=`             | L: `3`, R: `4`            |
 | `\|\|` and `&&`                      | L: `1`, R: `2`            |
 
-All of the above operators are binary, but there are also two unary operators. There's unary minus `-` and pitimes `○`, all unary operators have the same precedence and always have higher precedence than binary operators.
+All of the above operators are binary, but there are also four unary operators. There's unary minus `-`, pitimes `○`, sqrt `√`, and logical not `!`, all unary operators have the same precedence and always have higher precedence than binary operators.
 
 ### Unicode
 For the most part, every ascii operator has a unicode equivalent, `>=` may be writen as `≥`, `*` as `×` (note this is not ascii x), `<=` as `≤`, and `!=` as `≠`.
