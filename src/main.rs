@@ -14,6 +14,7 @@ fn main() {
     let arg = arg_it.next().unwrap_or_else(|| "repl".to_owned());
 
     if arg == "repl" {
+        #[cfg(feature = "repl")]
         if let Err(err) = repl() {
             eprintln!("{}", handle_err(err));
             exit(1);

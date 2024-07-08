@@ -4,8 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rustyline = { version = "14.0.0", features = ["derive"] }
+rustyline = { version = "14.0.0", features = ["derive"], optional = true }
 syntect = "5.2.0"
+
+[features]
+default = ["repl"]
+repl = ["dep:rustyline"]
 
 [profile.release]
 codegen-units = 1
