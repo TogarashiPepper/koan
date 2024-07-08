@@ -5,8 +5,10 @@ use koan::{
     lexer::lex,
     parser::parse,
     state::State,
-    repl::repl
 };
+
+#[cfg(feature = "repl")]
+use koan::repl::repl;
 
 fn main() {
     let mut arg_it = std::env::args();
