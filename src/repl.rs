@@ -8,12 +8,17 @@ use rustyline::{
     error::ReadlineError, highlight::Highlighter, validate::MatchingBracketValidator, Completer,
     Config, Editor, Helper, Hinter, Validator,
 };
-use syntect::{easy::HighlightLines, highlighting::ThemeSet, parsing::SyntaxSet};
+use syntect::{
+    easy::HighlightLines,
+    highlighting::ThemeSet,
+    parsing::{SyntaxDefinition, SyntaxSet, SyntaxSetBuilder},
+};
 
 use crate::{error::Result, lexer::lex, parser::parse, state::State, value::Value};
 
 #[derive(Helper, Completer, Hinter, Validator)]
 struct MyHelper {
+    syn_set: SyntaxSet,
     #[rustyline(Validator)]
     validator: MatchingBracketValidator,
     colored_prompt: String,
@@ -37,15 +42,16 @@ impl Highlighter for MyHelper {
     }
 
     fn highlight<'l>(&self, line: &'l str, _: usize) -> Cow<'l, str> {
-        let ps = SyntaxSet::load_defaults_newlines();
         let ts = ThemeSet::load_defaults();
         let theme = ts.themes["base16-mocha.dark"].clone();
 
-        // TODO: use actual koan grammar instead of just using rust's
-        let syntax = ps.find_syntax_by_extension("rs").unwrap();
-        let mut highlighter = HighlightLines::new(syntax, &theme);
+        let mut highlighter = HighlightLines::new(
+            self.syn_set.find_syntax_by_extension("koan").unwrap(),
+            &theme,
+        );
+
         let highlighted = highlighter
-            .highlight_line(line, &ps)
+            .highlight_line(line, &self.syn_set)
             .unwrap()
             .into_iter()
             .fold(String::new(), |mut acc, (style, text)| {
@@ -68,8 +74,18 @@ impl Highlighter for MyHelper {
 
 pub fn repl() -> Result<()> {
     let config = Config::builder().build();
+    let syn_def = SyntaxDefinition::load_from_str(
+        include_str!("../syntax/koan.sublime-syntax"),
+        true,
+        Some("koan"),
+    )
+    .unwrap();
+
+    let mut builder = SyntaxSetBuilder::new();
+    builder.add(syn_def);
 
     let h = MyHelper {
+        syn_set: builder.build(),
         colored_prompt: "".to_owned(),
         validator: MatchingBracketValidator::new(),
     };

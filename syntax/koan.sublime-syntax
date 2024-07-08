@@ -1,0 +1,35 @@
+%YAML 1.2
+---
+# http://www.sublimetext.com/docs/3/syntax.html
+name: Koan
+file_extensions:
+  - koan
+scope: source.koan
+
+contexts:
+  main:
+    - include: keywords
+    - include: strings
+    - include: numbers
+    - include: identifiers
+
+  keywords:
+    - match: '\b(let)\b'
+      scope: keyword.other.koan
+
+  strings:
+    - match: '"'
+      scope: punctuation.definition.string.begin.koan
+      push:
+        - meta_scope: string.quoted.double.koan
+        - match: '"'
+          scope: punctuation.definition.string.end.koan
+          pop: true
+
+  numbers:
+    - match: '\d+(\.\d+)?'
+      scope: constant.numeric.koan
+
+  identifiers:
+    - match: '[a-zA-Z_][a-zA-Z0-9_]*'
+      scope: variable.other.koan
