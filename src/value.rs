@@ -91,6 +91,16 @@ impl Value {
             }
         }
     }
+
+    pub fn abs(&self) -> Result<Self> {
+        match self {
+            Value::Num(n) => Ok(Value::Num(n.abs())),
+            a @ Value::Array(_) => a.map(|x| x.abs()),
+            invalid => {
+                Err(InterpreterError::MismatchedUnOp(Operator::Abs, invalid.ty_str()).into())
+            }
+        }
+    }
 }
 
 impl std::fmt::Display for Value {

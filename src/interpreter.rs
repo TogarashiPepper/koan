@@ -80,6 +80,11 @@ impl Expr {
 
                     !res
                 }
+                Operator::Abs => {
+                    let res = rhs.eval(s, out)?;
+
+                    res.abs()
+                }
                 _ => unreachable!(),
             },
             Expr::FunCall(name, params) => match name.as_str() {

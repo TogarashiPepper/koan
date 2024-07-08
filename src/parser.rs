@@ -146,6 +146,15 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
                     lhs
                 }
+                TokenType::Pipe => {
+                    let lhs = self.expr_bp(0)?;
+                    let _ = self.expect(TokenType::Pipe)?;
+
+                    Expr::PreOp {
+                        op: Operator::Abs,
+                        rhs: Box::new(lhs),
+                    }
+                }
                 TokenType::Op(op) => {
                     let ((), r_bp) = prefix_binding_power(op);
                     let rhs = self.expr_bp(r_bp)?;
@@ -175,11 +184,11 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         };
 
         while let Some(TokenType::Op(op)) = self.0.peek().map(|x| x.variant) {
-            let (l_bp, r_bp) = infix_binding_power(op);
-
             if !op.is_inf_op() {
                 return Err(ParseError::ExpectedInfixOp.into());
             };
+
+            let (l_bp, r_bp) = infix_binding_power(op);
 
             if l_bp < min_bp {
                 break;

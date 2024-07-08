@@ -14,6 +14,9 @@ This is a simple programming language I'll be working on. The goal is to have fu
 
 All of the above operators are binary, but there are also four unary operators. There's unary minus `-`, pitimes `○`, sqrt `√`, and logical not `!`, all unary operators have the same precedence and always have higher precedence than binary operators.
 
+### Abs
+The absolute value of a number (or an array of them) may be obtained by surrounding it in `|`s, so `|-1|` is `1`
+
 ### Unicode
 For the most part, every ascii operator has a unicode equivalent, `>=` may be writen as `≥`, `*` as `×` (note this is not ascii x), `<=` as `≤`, and `!=` as `≠`.
 

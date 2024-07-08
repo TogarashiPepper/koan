@@ -25,6 +25,7 @@ pub enum Operator {
     DoublePipe,
     DoubleAnd,
     Not,
+    Abs
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -43,6 +44,7 @@ pub enum TokenType {
     RCurly,
     LBracket,
     RBracket,
+    Pipe,
 }
 
 impl Operator {
@@ -68,7 +70,7 @@ impl Operator {
     pub fn is_pre_op(&self) -> bool {
         matches!(
             self,
-            Operator::PiTimes | Operator::Minus | Operator::Sqrt | Operator::Not
+            Operator::PiTimes | Operator::Minus | Operator::Sqrt | Operator::Not | Operator::Abs
         )
     }
 }
@@ -209,7 +211,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
             '}' => builder.variant(RCurly),
             '[' => builder.variant(LBracket),
             ']' => builder.variant(RBracket),
-            '|' => builder.variant_pair(&mut it, ('|', '|'), (None, Op(DoublePipe)))?,
+            '|' => builder.variant_pair(&mut it, ('|', '|'), (Some(Pipe), Op(DoublePipe)))?,
             '&' => builder.variant_pair(&mut it, ('&', '&'), (None, Op(DoubleAnd)))?,
             '!' => builder.variant_pair(&mut it, ('!', '='), (Some(Op(Not)), Op(NotEqual)))?,
             '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Op(Equal)), Op(DoubleEqual)))?,
