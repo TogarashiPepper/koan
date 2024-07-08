@@ -138,7 +138,20 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
     fn expr_bp(&mut self, min_bp: u8) -> Result<Expr> {
         let mut lhs = match self.0.next() {
             Some(tok) => match tok.variant {
-                TokenType::Number => Expr::NumLit(tok.lexeme.parse().unwrap()), // Ok to unwrap because it's a lexeme
+                TokenType::Number => {
+                    if self.check(TokenType::Ident) {
+                        let ident = self.expect(TokenType::Ident)?;
+
+                        Expr::BinOp {
+                            lhs: Box::new(Expr::NumLit(tok.lexeme.parse().unwrap())),
+                            op: Operator::Times,
+                            rhs: Box::new(Expr::Ident(ident.lexeme.to_owned())),
+                        }
+                    } else {
+                        Expr::NumLit(tok.lexeme.parse().unwrap()) // Ok to unwrap because it's a lexeme
+                    }
+                }
+
                 TokenType::String => Expr::StrLit(tok.lexeme.to_owned()),
                 TokenType::LParen => {
                     let lhs = self.expr_bp(0)?;
@@ -165,7 +178,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                     }
                 }
                 TokenType::Ident => {
-                    if let Some(TokenType::LParen) = self.0.peek().map(|x| x.variant) {
+                    if self.check(TokenType::LParen) {
                         self.fun_call(tok.lexeme.to_owned())?
                     } else {
                         Expr::Ident(tok.lexeme.to_owned())
