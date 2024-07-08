@@ -1,5 +1,6 @@
 use crate::value::Value;
 use std::collections::HashMap;
+use std::f64;
 
 #[derive(Debug)]
 pub struct State {
@@ -9,8 +10,18 @@ pub struct State {
 
 impl State {
     pub fn new() -> Self {
+        let mut variables = HashMap::new();
+        variables.insert("π".to_owned(), Value::Num(f64::consts::PI));
+        variables.insert("e".to_owned(), Value::Num(f64::consts::E));
+
         State {
-            variables: vec![HashMap::new()],
+            variables: vec![variables],
+        }
+    }
+    
+    pub fn empty() -> Self {
+        State {
+            variables: vec![HashMap::new()]
         }
     }
 
@@ -28,5 +39,11 @@ impl State {
         }
 
         None
+    }
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self::new()
     }
 }

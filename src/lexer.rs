@@ -82,6 +82,7 @@ pub struct Token<'a> {
     pub lexeme: &'a str,
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct TokenBuilder<'a> {
     variant: Option<TokenType>,
     idx: Option<usize>,
@@ -221,19 +222,21 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
             '<' => {
                 builder.variant_pair(&mut it, ('<', '='), (Some(Op(Lesser)), Op(LesserEqual)))?
             }
-            'a'..='z' | 'A'..='Z' | '_' => {
+            oc @ ('a'..='z' | 'A'..='Z' | '_' | 'π') => {
                 let mut end = idx;
                 while let Some((_, k)) = it.peek() {
-                    if k.is_alphanumeric() || *k == '_' {
+                        let k = *k;
+
+                    if k.is_alphanumeric() || k == '_' {
                         it.next();
 
-                        end += 1;
+                        end += k.len_utf8();
                     } else {
                         break;
                     }
                 }
 
-                builder.second(end - idx).variant(match &input[idx..=end] {
+                builder.second(end - idx).variant(match &input[idx..=end+oc.len_utf8()-1] {
                     "let" => TokenType::Let,
                     "fun" => TokenType::Fun,
                     _ => TokenType::Ident,
@@ -242,7 +245,9 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
             '0'..='9' => {
                 let mut end = idx;
                 let mut seen_dot = false;
+                let mut ran = false;
                 while let Some((_, k)) = it.peek() {
+                    ran = true;
                     if k.is_ascii_digit() {
                         it.next();
 
@@ -274,7 +279,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
                 it.next();
 
                 for (_, k) in it.by_ref() {
-                    end += 1;
+                    end += k.len_utf8();
 
                     if k == '"' {
                         break;
