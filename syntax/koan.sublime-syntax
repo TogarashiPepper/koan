@@ -31,5 +31,5 @@ contexts:
       scope: constant.numeric.koan
 
   identifiers:
-    - match: '[a-zA-Z_][a-zA-Z0-9_]*'
+    - match: '([a-zA-Z_][a-zA-Z0-9_]*|π)'
       scope: variable.other.koan
