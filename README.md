@@ -17,11 +17,14 @@ All of the above operators are binary, but there are also four unary operators. 
 ### Abs
 The absolute value of a number (or an array of them) may be obtained by surrounding it in `|`s, so `|-1|` is `1`
 
+### Implicit multiplication
+Multiplication may be done implicitly without the use of the `*` (or `×`) if it takes the form of `<literal><ident>` so `2π` is `2 * π` but `π2` is the identifier `π2`. In future versions user-defined variables with names such as `π2` will be disallowed, in hopes of more insightful error messages regarding implicit multiplication.
+
 ### Unicode
-For the most part, every ascii operator has a unicode equivalent, `>=` may be writen as `≥`, `*` as `×` (note this is not ascii x), `<=` as `≤`, and `!=` as `≠`.
+For the most part, every ascii operator has a unicode equivalent, `>=` may be written as `≥`, `*` as `×` (note this is not ascii x), `<=` as `≤`, and `!=` as `≠`.
 
 ### Comparision
-All of the comparision operators return `1` for `true` and `0` for `false`. This facilitates easier branchless programming and simplifies the language (if only marginally).
+All of the comparision operators return `1` for `true` and `0` for `false`. This facilitates easier branch-less programming and simplifies the language (if only marginally).
 
 ### Blocks
 Blocks are delineated by `{` and `}`. They consist of a series of statements and may optionally end with an expression. If a block ends with an expression that value will be used as the return value for the block.
