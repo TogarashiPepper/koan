@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 rustyline = { version = "14.0.0", features = ["derive"], optional = true }
 syntect = { version = "5.2.0", optional = true }
+thiserror = "1.0.62"
 
 [features]
 default = ["repl"]
