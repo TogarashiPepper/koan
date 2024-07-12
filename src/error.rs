@@ -7,6 +7,7 @@ pub type Result<T> = std::result::Result<T, KoanError>;
 #[derive(Debug, PartialEq)]
 pub enum LexError {
     PartialMultiCharToken(char, char),
+    IllegalCharInIdent(char),
     InvalidToken(String),
 }
 
@@ -29,7 +30,7 @@ pub enum InterpreterError {
     UndefFunc(String),
     /// Fields are: name, received arity, expected arity
     MismatchedArity(String, usize, usize),
-    BinOpArrInvalidLength
+    BinOpArrInvalidLength,
 }
 
 #[derive(Debug, PartialEq)]
@@ -85,6 +86,7 @@ pub fn handle_err(err: KoanError) -> String {
                 format!("Expected token `{s}` after `{f}`")
             }
             LexError::InvalidToken(tok) => format!("Character `{tok}` is not a valid token"),
+            LexError::IllegalCharInIdent(illegal) => format!("Character `{illegal}` is not allowed in user-defined identifiers"),
         },
         KoanErrorType::ParseErr(perr) => match perr {
             ParseError::ExpectedLiteral(ty) => format!("Expected literal of type `{ty}`"),

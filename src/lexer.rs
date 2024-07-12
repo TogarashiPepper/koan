@@ -25,7 +25,7 @@ pub enum Operator {
     DoublePipe,
     DoubleAnd,
     Not,
-    Abs
+    Abs,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -225,7 +225,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
             oc @ ('a'..='z' | 'A'..='Z' | '_' | 'π') => {
                 let mut end = idx;
                 while let Some((_, k)) = it.peek() {
-                        let k = *k;
+                    let k = *k;
 
                     if k.is_alphanumeric() || k == '_' {
                         it.next();
@@ -236,18 +236,24 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
                     }
                 }
 
-                builder.second(end - idx).variant(match &input[idx..=end+oc.len_utf8()-1] {
-                    "let" => TokenType::Let,
-                    "fun" => TokenType::Fun,
-                    _ => TokenType::Ident,
-                })
+                builder
+                    .second(end - idx)
+                    .variant(match &input[idx..=end + oc.len_utf8() - 1] {
+                        "let" => TokenType::Let,
+                        "fun" => TokenType::Fun,
+                        other => {
+                            if other != "π" && other.contains('π') {
+                                return Err(LexError::IllegalCharInIdent('π').into());
+                            } else {
+                                TokenType::Ident
+                            }
+                        }
+                    })
             }
             '0'..='9' => {
                 let mut end = idx;
                 let mut seen_dot = false;
-                let mut ran = false;
                 while let Some((_, k)) = it.peek() {
-                    ran = true;
                     if k.is_ascii_digit() {
                         it.next();
 
