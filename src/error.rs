@@ -97,52 +97,6 @@ impl PartialEq for KoanError {
 }
 
 pub fn handle_err(err: KoanError) -> String {
-    // match err.0 {
-    //     KoanErrorType::LexErr(lerr) => match lerr {
-    //         LexError::PartialMultiCharToken(f, s) => {
-    //             format!("Expected token `{s}` after `{f}`")
-    //         }
-    //         LexError::InvalidToken(tok) => format!("Character `{tok}` is not a valid token"),
-    //         LexError::IllegalCharInIdent(illegal) => {
-    //             format!("Character `{illegal}` is not allowed in user-defined identifiers")
-    //         }
-    //     },
-    //     KoanErrorType::ParseErr(perr) => match perr {
-    //         ParseError::ExpectedLiteral(ty) => format!("Expected literal of type `{ty}`"),
-    //         ParseError::ExpectedInfixOp => "Expected infix operator".to_owned(),
-    //         ParseError::ExpectedFoundEof(expected) => {
-    //             format!("Expected `{expected:?}`, found EOF")
-    //         }
-    //         ParseError::ExpectedFound(e, f) => format!("Expected `{e:?}`, found `{f:?}`"),
-    //         ParseError::Unexpected(unexpected) => {
-    //             format!("Unexpected `{unexpected:?}` token found")
-    //         }
-    //     },
-    //     KoanErrorType::InterpErr(ierr) => match ierr {
-    //         InterpreterError::MismatchedTypes(op, l, r) => {
-    //             format!("Cannot apply operator `{op:?}` to types `{l}` and `{r}`")
-    //         }
-    //         InterpreterError::DivByZero => "Attempted to divide by zero".to_owned(),
-    //         InterpreterError::UndefVar(varname) => {
-    //             format!("Variable `{varname}` is undefined")
-    //         }
-    //         InterpreterError::MismatchedUnOp(op, ty) => {
-    //             format!("Cannot apply unary operator `{op:?}` for type `{ty}`")
-    //         }
-    //         InterpreterError::UndefFunc(fnname) => format!("Function `{fnname}` is undefined"),
-    //         InterpreterError::MismatchedArity(name, got, expected) => {
-    //             format!("Function `{name}` got {got} arguments but expected {expected}")
-    //         }
-    //         InterpreterError::BinOpArrInvalidLength => {
-    //             "Binary Operations on arrays must be on two arrays of equal length".to_string()
-    //         }
-    //     },
-    //     KoanErrorType::CliErr(cerr) => match cerr {
-    //         CliError::FileError(ioerr) => {
-    //             format!("Got error kind `{ioerr}` when trying to read file")
-    //         }
-    //     },
-    // }
     match err.0 {
         KoanErrorType::LexErr(e) => format!("{e}"),
         KoanErrorType::ParseErr(e) => format!("{e}"),
