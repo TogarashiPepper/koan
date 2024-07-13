@@ -243,7 +243,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
                         "fun" => TokenType::Fun,
                         other => {
                             if other != "π" && other.contains('π') {
-                                return Err(LexError::IllegalCharInIdent('π').into());
+                                return Err(LexError::InvalidToken("π".to_owned()).into());
                             } else {
                                 TokenType::Ident
                             }

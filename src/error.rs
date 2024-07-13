@@ -47,6 +47,8 @@ pub enum InterpreterError {
     MismatchedArity(String, usize, usize),
     #[error("Binary Operations on arrays must be on two arrays of equal length")]
     BinOpArrInvalidLength,
+    #[error("Cannot shadow or reassign to `π`")]
+    AssignmentToPi,
 }
 
 #[derive(Error, Debug, PartialEq)]

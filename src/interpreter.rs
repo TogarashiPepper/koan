@@ -121,6 +121,10 @@ impl Ast {
         match self {
             Ast::Expression(e) => e.eval(s, out),
             Ast::LetDecl(ident, body) => {
+                if ident == "π" {
+                    return Err(InterpreterError::AssignmentToPi.into());
+                }
+
                 let v = body.eval(s, out)?;
                 s.set(ident, v);
                 Ok(Value::Nothing)
