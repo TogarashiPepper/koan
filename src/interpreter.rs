@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     error::{InterpreterError, Result},
@@ -96,6 +96,20 @@ impl Expr {
                     writeln!(out).unwrap();
 
                     Ok(Value::Nothing)
+                }
+                "floor" => {
+                    // TODO: accept values of type array to allow `floor([1.2, 2.3, 3.9, 4.1])`
+                    let retvals = params
+                        .into_iter()
+                        .map(|exp| exp.eval(s, out))
+                        .map(|x| match x? {
+                            Value::Num(n) => Ok(Value::Num(n.floor())),
+                            t => Err(InterpreterError::InvalidParamTy(name.clone(), t.ty_str()).into()), // OK to clone in error path
+                        })
+                        .collect::<Result<Vec<Value>>>()?;
+
+
+                    Ok(Value::Array(Rc::new(retvals)))
                 }
                 _ => todo!(),
             },
