@@ -5,11 +5,10 @@ This is a simple programming language I'll be working on. The goal is to have fu
 ### Operator precedence
 | Operator(s)                          | L and R binding power     |
 | ------------------------------------ | ------------------------- |
-| `^`                                  | L: `11`, R: `12`          |
-| `*`, `/`                             | L: `9`, R: `10`           |
-| `+`, `-`                             | L: `7`, R: `8`            |
-| `==` and `!=`                        | L: `5`, R: `6`            |
-| `>`, `>=`, `<`, and `<=`             | L: `3`, R: `4`            |
+| `^`                                  | L: `9`, R: `10`          |
+| `*`, `/`                             | L: `7`, R: `8`           |
+| `+`, `-`                             | L: `5`, R: `6`            |
+| `==`, `!=`  `>`, `>=`, `<`, and `<=` | L: `3`, R: `4`            |
 | `\|\|` and `&&`                      | L: `1`, R: `2`            |
 
 All of the above operators are binary, but there are also four unary operators. There's unary minus `-`, pitimes `○`, sqrt `√`, and logical not `!`, all unary operators have the same precedence and always have higher precedence than binary operators.
