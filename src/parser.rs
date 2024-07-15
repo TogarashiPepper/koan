@@ -196,9 +196,15 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
             None => return Err(ParseError::ExpectedLiteral("number".to_owned()).into()),
         };
 
-        while let Some(TokenType::Op(op)) = self.0.peek().map(|x| x.variant) {
-            if !op.is_inf_op() {
-                return Err(ParseError::ExpectedInfixOp.into());
+        while let Some(op) = self.0.peek().map(|x| x.variant) {
+            let op = match op {
+                TokenType::Op(o) if o.is_inf_op() => o,
+                TokenType::RParen
+                | TokenType::Comma
+                | TokenType::RBracket
+                | TokenType::RCurly
+                | TokenType::Semicolon => break,
+                _ => return Err(ParseError::ExpectedInfixOp.into()),
             };
 
             let (l_bp, r_bp) = infix_binding_power(op);
