@@ -134,7 +134,15 @@ impl Expr {
                         .as_num(name)?
                         .floor() as u64;
 
-                    todo!()
+                    if v > 4096 {
+                        return Err(InterpreterError::RangeTooLarge(v).into());
+                    }
+
+                    let arr = (0..v)
+                        .map(|elem| Value::Num(elem as f64))
+                        .collect::<Vec<Value>>();
+
+                    Ok(Value::Array(Rc::new(arr)))
                 }
                 _ => Err(InterpreterError::UndefFunc(name).into()),
             },

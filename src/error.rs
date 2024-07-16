@@ -53,6 +53,8 @@ pub enum InterpreterError {
     AssignmentToPi,
     #[error("Function `{0}` did not expect argument of type {1}")]
     InvalidParamTy(String, &'static str),
+    #[error("Array of {0} elements would be too large")]
+    RangeTooLarge(u64),
 }
 
 #[derive(Error, Debug, PartialEq)]
