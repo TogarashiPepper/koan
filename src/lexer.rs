@@ -70,7 +70,11 @@ impl Operator {
     pub fn is_pre_op(&self) -> bool {
         matches!(
             self,
-            Operator::PiTimes | Operator::Minus | Operator::Sqrt | Operator::Not | Operator::Abs
+            Operator::PiTimes
+                | Operator::Minus
+                | Operator::Sqrt
+                | Operator::Not
+                | Operator::Abs
         )
     }
 }
@@ -128,7 +132,10 @@ impl<'a> TokenBuilder<'a> {
             // TODO: probably avoid Some(_) here later on for cases of multi-chars with the same start char
             None | Some(_) => match single_char_token {
                 Some(single_char) => Ok(self.variant(single_char)),
-                None => Err(LexError::PartialMultiCharToken(first_char, next_char).into()),
+                None => {
+                    Err(LexError::PartialMultiCharToken(first_char, next_char)
+                        .into())
+                }
             },
         }
     }
@@ -143,7 +150,9 @@ impl<'a> TokenBuilder<'a> {
     /// string, if they are not this method will not behave as expected.
     fn second(mut self, len: usize) -> TokenBuilder<'a> {
         let idx = self.idx.unwrap();
-        self.lexeme = Some(&self.input_string[idx..idx + self.lexeme.unwrap().len() + len]);
+        self.lexeme = Some(
+            &self.input_string[idx..idx + self.lexeme.unwrap().len() + len],
+        );
 
         self
     }
@@ -212,16 +221,36 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
             '}' => builder.variant(RCurly),
             '[' => builder.variant(LBracket),
             ']' => builder.variant(RBracket),
-            '|' => builder.variant_pair(&mut it, ('|', '|'), (Some(Pipe), Op(DoublePipe)))?,
-            '&' => builder.variant_pair(&mut it, ('&', '&'), (None, Op(DoubleAnd)))?,
-            '!' => builder.variant_pair(&mut it, ('!', '='), (Some(Op(Not)), Op(NotEqual)))?,
-            '=' => builder.variant_pair(&mut it, ('=', '='), (Some(Op(Equal)), Op(DoubleEqual)))?,
-            '>' => {
-                builder.variant_pair(&mut it, ('>', '='), (Some(Op(Greater)), Op(GreaterEqual)))?
-            }
-            '<' => {
-                builder.variant_pair(&mut it, ('<', '='), (Some(Op(Lesser)), Op(LesserEqual)))?
-            }
+            '|' => builder.variant_pair(
+                &mut it,
+                ('|', '|'),
+                (Some(Pipe), Op(DoublePipe)),
+            )?,
+            '&' => builder.variant_pair(
+                &mut it,
+                ('&', '&'),
+                (None, Op(DoubleAnd)),
+            )?,
+            '!' => builder.variant_pair(
+                &mut it,
+                ('!', '='),
+                (Some(Op(Not)), Op(NotEqual)),
+            )?,
+            '=' => builder.variant_pair(
+                &mut it,
+                ('=', '='),
+                (Some(Op(Equal)), Op(DoubleEqual)),
+            )?,
+            '>' => builder.variant_pair(
+                &mut it,
+                ('>', '='),
+                (Some(Op(Greater)), Op(GreaterEqual)),
+            )?,
+            '<' => builder.variant_pair(
+                &mut it,
+                ('<', '='),
+                (Some(Op(Lesser)), Op(LesserEqual)),
+            )?,
             oc @ ('a'..='z' | 'A'..='Z' | '_' | 'π') => {
                 let mut end = idx;
                 while let Some((_, k)) = it.peek() {
@@ -236,19 +265,22 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
                     }
                 }
 
-                builder
-                    .second(end - idx)
-                    .variant(match &input[idx..=end + oc.len_utf8() - 1] {
+                builder.second(end - idx).variant(
+                    match &input[idx..=end + oc.len_utf8() - 1] {
                         "let" => TokenType::Let,
                         "fun" => TokenType::Fun,
                         other => {
                             if other != "π" && other.contains('π') {
-                                return Err(LexError::InvalidToken("π".to_owned()).into());
+                                return Err(LexError::InvalidToken(
+                                    "π".to_owned(),
+                                )
+                                .into());
                             } else {
                                 TokenType::Ident
                             }
                         }
-                    })
+                    },
+                )
             }
             '0'..='9' => {
                 let mut end = idx;

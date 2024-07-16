@@ -60,7 +60,9 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                 TokenType::Fun => self.fun_def()?,
                 TokenType::RCurly => {
                     if !in_block {
-                        return Err(ParseError::Unexpected(TokenType::RCurly).into());
+                        return Err(
+                            ParseError::Unexpected(TokenType::RCurly).into()
+                        );
                     }
 
                     break;
@@ -91,7 +93,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
     }
 
     fn fun_def(&mut self) -> Result<Ast> {
-        let [_, ident] = self.multi_expect(&[TokenType::Fun, TokenType::Ident])?;
+        let [_, ident] =
+            self.multi_expect(&[TokenType::Fun, TokenType::Ident])?;
         let params = self.list(
             (Some(TokenType::LParen), TokenType::RParen),
             TokenType::Comma,
@@ -100,7 +103,10 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                 let x = stream.0.next().unwrap();
                 match x.variant {
                     TokenType::Ident => Ok(x.lexeme.to_owned()),
-                    found => Err(ParseError::ExpectedFound(TokenType::Ident, found).into()),
+                    found => {
+                        Err(ParseError::ExpectedFound(TokenType::Ident, found)
+                            .into())
+                    }
                 }
             },
         )?;
@@ -143,7 +149,9 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                         let ident = self.expect(TokenType::Ident)?;
 
                         Expr::BinOp {
-                            lhs: Box::new(Expr::NumLit(tok.lexeme.parse().unwrap())),
+                            lhs: Box::new(Expr::NumLit(
+                                tok.lexeme.parse().unwrap(),
+                            )),
                             op: Operator::Times,
                             rhs: Box::new(Expr::Ident(ident.lexeme.to_owned())),
                         }
@@ -185,15 +193,26 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                     }
                 }
                 TokenType::LBracket => {
-                    let ls = self.list((None, TokenType::RBracket), TokenType::Comma, |s| {
-                        s.expr_bp(0)
-                    })?;
+                    let ls = self.list(
+                        (None, TokenType::RBracket),
+                        TokenType::Comma,
+                        |s| s.expr_bp(0),
+                    )?;
 
                     Expr::Array(ls)
                 }
-                _ => return Err(ParseError::ExpectedLiteral("number".to_owned()).into()),
+                _ => {
+                    return Err(ParseError::ExpectedLiteral(
+                        "number".to_owned(),
+                    )
+                    .into())
+                }
             },
-            None => return Err(ParseError::ExpectedLiteral("number".to_owned()).into()),
+            None => {
+                return Err(
+                    ParseError::ExpectedLiteral("number".to_owned()).into()
+                )
+            }
         };
 
         while let Some(op) = self.0.peek().map(|x| x.variant) {
@@ -238,7 +257,8 @@ fn infix_binding_power(op: Operator) -> (u8, u8) {
         Power => (9, 10),
         Times | Slash => (7, 8),
         Plus | Minus => (5, 6),
-        DoubleEqual | NotEqual | Greater | GreaterEqual | Lesser | LesserEqual => (3, 4),
+        DoubleEqual | NotEqual | Greater | GreaterEqual | Lesser
+        | LesserEqual => (3, 4),
         DoublePipe | DoubleAnd => (1, 2),
         _ => unreachable!(),
     }
@@ -246,7 +266,10 @@ fn infix_binding_power(op: Operator) -> (u8, u8) {
 
 fn prefix_binding_power(op: Operator) -> ((), u8) {
     match op {
-        Operator::PiTimes | Operator::Minus | Operator::Sqrt | Operator::Not => ((), 11),
+        Operator::PiTimes
+        | Operator::Minus
+        | Operator::Sqrt
+        | Operator::Not => ((), 11),
         _ => panic!("Expected prefix operator, found some other token"),
     }
 }

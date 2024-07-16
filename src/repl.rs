@@ -5,8 +5,9 @@ use std::{
 };
 
 use rustyline::{
-    error::ReadlineError, highlight::Highlighter, validate::MatchingBracketValidator, Completer,
-    Config, Editor, Helper, Hinter, Validator,
+    error::ReadlineError, highlight::Highlighter,
+    validate::MatchingBracketValidator, Completer, Config, Editor, Helper,
+    Hinter, Validator,
 };
 use syntect::{
     easy::HighlightLines,
@@ -14,7 +15,9 @@ use syntect::{
     parsing::{SyntaxDefinition, SyntaxSet, SyntaxSetBuilder},
 };
 
-use crate::{error::Result, lexer::lex, parser::parse, state::State, value::Value};
+use crate::{
+    error::Result, lexer::lex, parser::parse, state::State, value::Value,
+};
 
 #[derive(Helper, Completer, Hinter, Validator)]
 struct MyHelper {
@@ -58,7 +61,10 @@ impl Highlighter for MyHelper {
                 let _ = write!(
                     acc,
                     "\x1b[38;2;{};{};{}m{}\x1b[0m",
-                    style.foreground.r, style.foreground.g, style.foreground.b, text
+                    style.foreground.r,
+                    style.foreground.g,
+                    style.foreground.b,
+                    text
                 );
 
                 acc
@@ -95,7 +101,8 @@ pub fn repl() -> Result<()> {
 
     loop {
         let p = "λ ".to_owned();
-        rl.helper_mut().expect("No helper").colored_prompt = format!("\x1b[1;32m{p}\x1b[0m");
+        rl.helper_mut().expect("No helper").colored_prompt =
+            format!("\x1b[1;32m{p}\x1b[0m");
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {

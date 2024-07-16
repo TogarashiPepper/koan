@@ -18,10 +18,10 @@ impl State {
             variables: vec![variables],
         }
     }
-    
+
     pub fn empty() -> Self {
         State {
-            variables: vec![HashMap::new()]
+            variables: vec![HashMap::new()],
         }
     }
 

@@ -45,12 +45,14 @@ pub enum InterpreterError {
     /// Fields are: name, received arity, expected arity
     #[error("Function `{0}` got {1} arguments but expected {2}")]
     MismatchedArity(String, usize, usize),
-    #[error("Binary Operations on arrays must be on two arrays of equal length")]
+    #[error(
+        "Binary Operations on arrays must be on two arrays of equal length"
+    )]
     BinOpArrInvalidLength,
     #[error("Cannot shadow or reassign to `π`")]
     AssignmentToPi,
     #[error("Function `{0}` did not expect argument of type {1}")]
-    InvalidParamTy(String, &'static str)
+    InvalidParamTy(String, &'static str),
 }
 
 #[derive(Error, Debug, PartialEq)]

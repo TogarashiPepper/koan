@@ -21,7 +21,10 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         }
     }
 
-    pub fn multi_expect<const N: usize>(&mut self, tys: &[TokenType; N]) -> Result<[Token<'a>; N]> {
+    pub fn multi_expect<const N: usize>(
+        &mut self,
+        tys: &[TokenType; N],
+    ) -> Result<[Token<'a>; N]> {
         let mut res = Vec::with_capacity(N);
 
         for expected in tys {
@@ -64,7 +67,9 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
                     let _ = self.expect(sep)?;
                 }
-                None => return Err(ParseError::ExpectedFoundEof(delim.1).into()),
+                None => {
+                    return Err(ParseError::ExpectedFoundEof(delim.1).into())
+                }
             }
         }
 

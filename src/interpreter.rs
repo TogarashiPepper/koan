@@ -50,9 +50,10 @@ impl Expr {
                     };
 
                     match (lhs, rhs) {
-                        (l @ Value::Array(_), Value::Array(r)) => {
-                            l.zip(r, |l, r| Ok(Value::Num(op(&l, &r) as u8 as f64)))
-                        }
+                        (l @ Value::Array(_), Value::Array(r)) => l
+                            .zip(r, |l, r| {
+                                Ok(Value::Num(op(&l, &r) as u8 as f64))
+                            }),
                         (ls @ Value::Array(_), r @ Value::Num(_)) => {
                             ls.map(|l| Ok(Value::Num(op(&l, &r) as u8 as f64)))
                         }
@@ -65,7 +66,9 @@ impl Expr {
                 _ => unreachable!(),
             },
             Expr::PreOp { op, rhs } if op.is_pre_op() => match op {
-                Operator::PiTimes => rhs.eval(s, out)? * Value::Num(f64::consts::PI),
+                Operator::PiTimes => {
+                    rhs.eval(s, out)? * Value::Num(f64::consts::PI)
+                }
                 Operator::Minus => {
                     let res = rhs.eval(s, out)?;
                     -res
@@ -87,7 +90,7 @@ impl Expr {
                 }
                 _ => unreachable!(),
             },
-            Expr::FunCall(name, params) => match name.as_str() {
+            Expr::FunCall(name, mut params) => match name.as_str() {
                 "print" => {
                     for p in params {
                         let v = p.eval(s, out)?;
@@ -104,12 +107,34 @@ impl Expr {
                         .map(|exp| exp.eval(s, out))
                         .map(|x| match x? {
                             Value::Num(n) => Ok(Value::Num(n.floor())),
-                            t => Err(InterpreterError::InvalidParamTy(name.clone(), t.ty_str()).into()), // OK to clone in error path
+                            t => Err(InterpreterError::InvalidParamTy(
+                                name.clone(),
+                                t.ty_str(),
+                            )
+                            .into()), // OK to clone in error path
                         })
                         .collect::<Result<Vec<Value>>>()?;
 
-
                     Ok(Value::Array(Rc::new(retvals)))
+                }
+                "range" => {
+                    if params.len() != 1 {
+                        return Err(InterpreterError::MismatchedArity(
+                            name,
+                            params.len(),
+                            1,
+                        )
+                        .into());
+                    }
+
+                    let v = params
+                        .pop()
+                        .unwrap()
+                        .eval(s, out)?
+                        .as_num(name)?
+                        .floor() as u64;
+
+                    todo!()
                 }
                 _ => Err(InterpreterError::UndefFunc(name).into()),
             },
