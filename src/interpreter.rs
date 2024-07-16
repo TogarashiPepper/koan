@@ -111,7 +111,7 @@ impl Expr {
 
                     Ok(Value::Array(Rc::new(retvals)))
                 }
-                _ => todo!(),
+                _ => Err(InterpreterError::UndefFunc(name).into()),
             },
             Expr::Ident(ident) => s
                 .get(&ident)
