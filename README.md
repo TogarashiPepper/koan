@@ -1,6 +1,26 @@
 # The Koan Language
 This is a simple programming language I'll be working on. The goal is to have fun language features that aren't very common (e.g. apl-esque single character function names)
 
+## Standard library
+### Range
+The `range` function takes an integer `n` (if it is a float, it will be floored) and returns an array of 0 to `n - 1`.
+
+For example:
+```js
+let x = range(10);
+x // prints: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+```
+
+### Floor
+The `floor` function takes 1 or more numbers and floors them. It may also take a singular array, at which point it would be have like how `map(arr, floor)` works in other languages.
+
+For example:
+```js
+floor(1.5, 2.5, π) // prints: [1, 2, 3]
+floor(1.999999999) // prints: 1
+floor([1.5, 2, π]) // prints: [1, 2, 3]
+```
+
 ## Syntax
 ### Operator precedence
 | Operator(s)                          | L and R binding power     |
