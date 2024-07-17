@@ -101,21 +101,38 @@ impl Expr {
                     Ok(Value::Nothing)
                 }
                 "floor" => {
-                    // TODO: accept values of type array to allow `floor([1.2, 2.3, 3.9, 4.1])`
-                    let retvals = params
-                        .into_iter()
-                        .map(|exp| exp.eval(s, out))
-                        .map(|x| match x? {
-                            Value::Num(n) => Ok(Value::Num(n.floor())),
+                    // TODO: get some helpers to assert common preconditions: arity, types etc.
+
+                    if params.is_empty() {
+                        return Err(InterpreterError::MismatchedArity(
+                            name,
+                            params.len(),
+                            1,
+                        )
+                        .into());
+                    }
+
+                    if params.len() == 1 {
+                        match params.pop().unwrap().eval(s, out)? {
+                            n @ Value::Num(_) => n.in_num(&name, f64::floor),
+                            a @ Value::Array(_) => {
+                                a.map(|n| n.in_num(&name, f64::floor))
+                            }
                             t => Err(InterpreterError::InvalidParamTy(
-                                name.clone(),
+                                name,
                                 t.ty_str(),
                             )
-                            .into()), // OK to clone in error path
-                        })
-                        .collect::<Result<Vec<Value>>>()?;
+                            .into()),
+                        }
+                    } else {
+                        let retvals = params
+                            .into_iter()
+                            .map(|exp| exp.eval(s, out))
+                            .map(|x| x?.in_num("floor", f64::floor))
+                            .collect::<Result<Vec<Value>>>()?;
 
-                    Ok(Value::Array(Rc::new(retvals)))
+                        Ok(Value::Array(Rc::new(retvals)))
+                    }
                 }
                 "range" => {
                     if params.len() != 1 {

@@ -39,6 +39,22 @@ impl Value {
         }
     }
 
+    /// Similar to option.expect or map, tries to apply the value to the Num variant, erroring if
+    /// its a different variant
+    pub fn in_num<F>(&self, fn_name: &str, f: F) -> Result<Value>
+    where
+        F: FnOnce(f64) -> f64,
+    {
+        match self {
+            Value::Num(n) => Ok(Value::Num(f(*n))),
+            t => Err(InterpreterError::InvalidParamTy(
+                fn_name.to_owned(),
+                t.ty_str(),
+            )
+            .into()),
+        }
+    }
+
     pub fn map<F>(&self, mut f: F) -> Result<Self>
     where
         F: FnMut(Value) -> Result<Value>,
