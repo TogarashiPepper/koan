@@ -20,6 +20,15 @@ floor(1.5, 2.5, π) // prints: [1, 2, 3]
 floor(1.999999999) // prints: 1
 floor([1.5, 2, π]) // prints: [1, 2, 3]
 ```
+### Print
+The print function takes 0 or more arguments and prints them to `stdout`. If multiple arguments are provided they will be separated by spaces.
+
+For example:
+```js
+print()     // prints a newline
+print(1)    // prints 1\n
+print(1, 2) // prints 1 2\n
+```
 
 ## Syntax
 ### Operator precedence
