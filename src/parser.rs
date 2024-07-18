@@ -213,7 +213,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                 | TokenType::Comma
                 | TokenType::RBracket
                 | TokenType::RCurly
-                | TokenType::Semicolon => break,
+                | TokenType::Semicolon
+                | TokenType::Pipe => break,
                 _ => return Err(ParseError::ExpectedInfixOp.into()),
             };
 
