@@ -13,6 +13,8 @@ pub enum LexError {
     IllegalCharInIdent(char),
     #[error("Character `{0}` is not allowed in user-defined identifiers")]
     InvalidToken(String),
+    #[error("Unterminated string literal")]
+    UntermStringLit,
 }
 
 #[derive(Error, Debug, PartialEq)]

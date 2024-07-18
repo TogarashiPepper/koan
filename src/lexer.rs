@@ -314,14 +314,20 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
             '"' => {
                 let start = idx + 1;
                 let mut end = idx + 1;
+                let mut seen_r_quote = false;
                 it.next();
 
                 for (_, k) in it.by_ref() {
                     end += k.len_utf8();
 
                     if k == '"' {
+                        seen_r_quote = true;
                         break;
                     }
+                }
+
+                if !seen_r_quote {
+                    return Err(LexError::UntermStringLit.into());
                 }
 
                 res.push(Token {
