@@ -1,11 +1,17 @@
-use crate::value::Value;
-use std::collections::HashMap;
-use std::f64;
+use crate::{parser::Ast, value::Value};
+use std::{collections::HashMap, f64};
+
+#[derive(Debug)]
+pub struct Function {
+    pub params: Vec<String>,
+    pub body: Ast,
+}
 
 #[derive(Debug)]
 pub struct State {
     // Array of environments, index = depth (i.e. `0` = global scope)
     pub variables: Vec<HashMap<String, Value>>,
+    pub functions: HashMap<String, Function>,
 }
 
 impl State {
@@ -16,12 +22,14 @@ impl State {
 
         State {
             variables: vec![variables],
+            functions: HashMap::new()
         }
     }
 
     pub fn empty() -> Self {
         State {
             variables: vec![HashMap::new()],
+            functions: HashMap::new(),
         }
     }
 

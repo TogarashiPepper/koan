@@ -4,7 +4,7 @@ use crate::{
     error::{InterpreterError, Result},
     lexer::Operator,
     parser::{Ast, Expr},
-    state::State,
+    state::{Function, State},
     value::Value,
 };
 
@@ -161,7 +161,26 @@ impl Expr {
 
                     Ok(Value::Array(Rc::new(arr)))
                 }
-                _ => Err(InterpreterError::UndefFunc(name).into()),
+                _ => match s.functions.get(&name) {
+                    Some(f) => {
+                        // TODO: dont do this, figure out something better for perf
+                        let p_names = f.params.clone();
+                        let p_exprs = params;
+
+                        assert_eq!(p_names.len(), p_exprs.len());
+
+                        let mut fn_scope = State::new();
+
+                        for (pn, pe) in p_names.into_iter().zip(p_exprs) {
+                            let v = pe.eval(&mut fn_scope, out)?;
+                            fn_scope.set(pn, v);
+                        }
+
+                        // TODO: dont do this (x2), maybe some way to share/eval by-ref
+                        f.body.clone().eval(&mut fn_scope, out)
+                    }
+                    None => Err(InterpreterError::UndefFunc(name).into()),
+                },
             },
             Expr::Ident(ident) => s
                 .get(&ident)
@@ -217,7 +236,21 @@ impl Ast {
                     None => Value::Nothing,
                 })
             }
-            Ast::FunDecl { name, params, body } => todo!(),
+            Ast::FunDecl { name, params, body } => {
+                if s.variables.len() != 1 {
+                    return Err(InterpreterError::NonTopLevelFnDef.into());
+                }
+
+                s.functions.insert(
+                    name,
+                    Function {
+                        params,
+                        body: *body,
+                    },
+                );
+
+                Ok(Value::Nothing)
+            }
         }
     }
 }

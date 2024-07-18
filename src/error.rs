@@ -55,6 +55,8 @@ pub enum InterpreterError {
     InvalidParamTy(String, &'static str),
     #[error("Array of {0} elements would be too large")]
     RangeTooLarge(u64),
+    #[error("Cannot define functions outside of the top level")]
+    NonTopLevelFnDef,
 }
 
 #[derive(Error, Debug, PartialEq)]

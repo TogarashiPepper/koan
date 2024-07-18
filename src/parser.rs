@@ -7,7 +7,7 @@ use crate::{
     lexer::{Operator, Token, TokenType},
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Ast {
     Expression(Expr),
     Statement(Expr),
@@ -20,7 +20,7 @@ pub enum Ast {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     // Convert this to BinOp(BinOp) for impls on it?
     BinOp {
@@ -99,22 +99,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
             (Some(TokenType::LParen), TokenType::RParen),
             TokenType::Comma,
             // list method already peaked b4 calling
-            |stream| {
-                let x = stream.0.next().unwrap();
-                match x.variant {
-                    TokenType::Ident => Ok(x.lexeme.to_owned()),
-                    found => {
-                        Err(ParseError::ExpectedFound(TokenType::Ident, found)
-                            .into())
-                    }
-                }
-            },
+            |stream| stream.expect(TokenType::Ident),
         )?;
         let block = self.block()?;
 
         Ok(Ast::FunDecl {
             name: ident.lexeme.to_owned(),
-            params,
+            params: params.into_iter().map(|t| t.lexeme.to_string()).collect(),
             body: Box::new(block),
         })
     }
