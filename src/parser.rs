@@ -5,14 +5,15 @@ use std::iter::Peekable;
 use crate::{
     error::{ParseError, Result},
     lexer::{Operator, Token, TokenType},
+    pool::{Expr, ExprPool, ExprRef},
 };
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Ast {
-    Expression(Expr),
-    Statement(Expr),
+    Expression(ExprRef),
+    Statement(ExprRef),
     Block(Vec<Ast>),
-    LetDecl(String, Expr),
+    LetDecl(String, ExprRef),
     FunDecl {
         name: String,
         params: Vec<String>,
@@ -20,33 +21,19 @@ pub enum Ast {
     },
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Expr {
-    // Convert this to BinOp(BinOp) for impls on it?
-    BinOp {
-        lhs: Box<Expr>,
-        op: Operator,
-        rhs: Box<Expr>,
-    },
-    PreOp {
-        op: Operator,
-        rhs: Box<Expr>,
-    },
-    Ident(String),
-    // TODO: Add typed integer literals to avoid JS-esque strangeness
-    NumLit(f64),
-    StrLit(String),
-    FunCall(String, Vec<Expr>),
-    Array(Vec<Expr>),
-}
-
 pub fn parse(tokens: Vec<Token<'_>>) -> Result<Vec<Ast>> {
-    let mut it = TokenStream(tokens.into_iter().peekable());
+    let mut it = TokenStream {
+        it: tokens.into_iter().peekable(),
+        pool: ExprPool::new(),
+    };
 
     it.program(false)
 }
 
-pub struct TokenStream<'a, T: Iterator<Item = Token<'a>>>(Peekable<T>);
+pub struct TokenStream<'a, T: Iterator<Item = Token<'a>>> {
+    it: Peekable<T>,
+    pool: ExprPool,
+}
 
 impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
     /// in_block parameter tells the program parser to error, or simply return the ast when it
@@ -54,7 +41,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
     fn program(&mut self, in_block: bool) -> Result<Vec<Ast>> {
         let mut program = vec![];
 
-        while let Some(p) = self.0.peek() {
+        while let Some(p) = self.it.peek() {
             program.push(match p.variant {
                 TokenType::Let => self.let_decl()?,
                 TokenType::Fun => self.fun_def()?,
@@ -72,7 +59,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                     let expr = self.expr_bp(0)?;
                     match self.check(TokenType::Semicolon) {
                         true => {
-                            self.0.next();
+                            self.it.next();
                             Ast::Statement(expr)
                         }
                         false => Ast::Expression(expr),
@@ -110,14 +97,14 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         })
     }
 
-    fn fun_call(&mut self, ident: String) -> Result<Expr> {
+    fn fun_call(&mut self, ident: String) -> Result<ExprRef> {
         let params = self.list(
             (Some(TokenType::LParen), TokenType::RParen),
             TokenType::Comma,
             |stream| stream.expr_bp(0),
         )?;
 
-        Ok(Expr::FunCall(ident, params))
+        Ok(self.pool.push(Expr::FunCall(ident, params)))
     }
 
     fn let_decl(&mut self) -> Result<Ast> {
@@ -132,26 +119,35 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         Ok(Ast::LetDecl(ident.lexeme.to_owned(), body))
     }
 
-    fn expr_bp(&mut self, min_bp: u8) -> Result<Expr> {
-        let mut lhs = match self.0.next() {
+    fn expr_bp(&mut self, min_bp: u8) -> Result<ExprRef> {
+        let mut lhs = match self.it.next() {
             Some(tok) => match tok.variant {
                 TokenType::Number => {
                     if self.check(TokenType::Ident) {
                         let ident = self.expect(TokenType::Ident)?;
+                        let lhs = self
+                            .pool
+                            .push(Expr::NumLit(tok.lexeme.parse().unwrap()));
+                        let rhs = self
+                            .pool
+                            .push(Expr::Ident(ident.lexeme.to_owned()));
 
-                        Expr::BinOp {
-                            lhs: Box::new(Expr::NumLit(
-                                tok.lexeme.parse().unwrap(),
-                            )),
+                        self.pool.push(Expr::BinOp {
+                            lhs,
                             op: Operator::Times,
-                            rhs: Box::new(Expr::Ident(ident.lexeme.to_owned())),
-                        }
+                            rhs,
+                        })
                     } else {
-                        Expr::NumLit(tok.lexeme.parse().unwrap()) // Ok to unwrap because it's a lexeme
+                        let exp_ref = self
+                            .pool
+                            .push(Expr::NumLit(tok.lexeme.parse().unwrap()));
+                        exp_ref
                     }
                 }
 
-                TokenType::String => Expr::StrLit(tok.lexeme.to_owned()),
+                TokenType::String => {
+                    self.pool.push(Expr::StrLit(tok.lexeme.to_owned()))
+                }
                 TokenType::LParen => {
                     let lhs = self.expr_bp(0)?;
                     let _ = self.expect(TokenType::RParen)?;
@@ -159,28 +155,25 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                     lhs
                 }
                 TokenType::Pipe => {
-                    let lhs = self.expr_bp(0)?;
+                    let rhs = self.expr_bp(0)?;
                     let _ = self.expect(TokenType::Pipe)?;
 
-                    Expr::PreOp {
+                    self.pool.push(Expr::PreOp {
                         op: Operator::Abs,
-                        rhs: Box::new(lhs),
-                    }
+                        rhs,
+                    })
                 }
                 TokenType::Op(op) => {
                     let ((), r_bp) = prefix_binding_power(op);
                     let rhs = self.expr_bp(r_bp)?;
 
-                    Expr::PreOp {
-                        op,
-                        rhs: Box::new(rhs),
-                    }
+                    self.pool.push(Expr::PreOp { op, rhs })
                 }
                 TokenType::Ident => {
                     if self.check(TokenType::LParen) {
                         self.fun_call(tok.lexeme.to_owned())?
                     } else {
-                        Expr::Ident(tok.lexeme.to_owned())
+                        self.pool.push(Expr::Ident(tok.lexeme.to_owned()))
                     }
                 }
                 TokenType::LBracket => {
@@ -190,7 +183,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                         |s| s.expr_bp(0),
                     )?;
 
-                    Expr::Array(ls)
+                    self.pool.push(Expr::Array(ls))
                 }
                 _ => {
                     return Err(ParseError::ExpectedLiteral(
@@ -206,7 +199,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
             }
         };
 
-        while let Some(op) = self.0.peek().map(|x| x.variant) {
+        while let Some(op) = self.it.peek().map(|x| x.variant) {
             let op = match op {
                 TokenType::Op(o) if o.is_inf_op() => o,
                 TokenType::RParen
@@ -224,14 +217,10 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                 break;
             }
 
-            self.0.next();
+            self.it.next();
             let rhs = self.expr_bp(r_bp)?;
 
-            lhs = Expr::BinOp {
-                lhs: Box::new(lhs),
-                op,
-                rhs: Box::new(rhs),
-            }
+            lhs = self.pool.push(Expr::BinOp { lhs, op, rhs });
         }
 
         Ok(lhs)
@@ -277,7 +266,7 @@ mod tests {
         Box::new(x)
     }
 
-    fn assert_parse_expr(input: &'static str, expected: Expr) {
+    fn assert_parse_expr(input: &'static str, expected: ExprRef) {
         assert_parse(input, Ast::Expression(expected));
     }
 
