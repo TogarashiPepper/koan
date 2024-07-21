@@ -20,7 +20,7 @@ pub enum Expr {
     Array(Vec<ExprRef>),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct ExprRef(usize);
 
 #[derive(Debug, PartialEq, Clone)]
@@ -41,4 +41,6 @@ impl ExprPool {
         
         ExprRef(idx)
     }
+
 }
+

@@ -2,7 +2,8 @@ pub mod error;
 // pub mod interpreter;
 pub mod lexer;
 pub mod parser;
-mod pool;
+pub mod pool;
+pub mod expr;
 // #[cfg(feature = "repl")]
 // pub mod repl;
 // pub mod state;

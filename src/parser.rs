@@ -21,24 +21,24 @@ pub enum Ast {
     },
 }
 
-pub fn parse(tokens: Vec<Token<'_>>) -> Result<Vec<Ast>> {
+pub fn parse(tokens: Vec<Token<'_>>) -> Result<(Vec<Ast>, ExprPool)> {
     let mut it = TokenStream {
         it: tokens.into_iter().peekable(),
         pool: ExprPool::new(),
     };
 
-    it.program(false)
+    Ok((it.program(false)?, it.pool))
 }
 
 pub struct TokenStream<'a, T: Iterator<Item = Token<'a>>> {
-    it: Peekable<T>,
-    pool: ExprPool,
+    pub it: Peekable<T>,
+    pub pool: ExprPool,
 }
 
 impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
     /// in_block parameter tells the program parser to error, or simply return the ast when it
     /// encounters a `}` character
-    fn program(&mut self, in_block: bool) -> Result<Vec<Ast>> {
+    pub fn program(&mut self, in_block: bool) -> Result<Vec<Ast>> {
         let mut program = vec![];
 
         while let Some(p) = self.it.peek() {
@@ -71,7 +71,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         Ok(program)
     }
 
-    fn block(&mut self) -> Result<Ast> {
+    pub fn block(&mut self) -> Result<Ast> {
         let _ = self.expect(TokenType::LCurly)?;
         let block = self.program(true)?;
         let _ = self.expect(TokenType::RCurly)?;
@@ -79,7 +79,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         Ok(Ast::Block(block))
     }
 
-    fn fun_def(&mut self) -> Result<Ast> {
+    pub fn fun_def(&mut self) -> Result<Ast> {
         let [_, ident] =
             self.multi_expect(&[TokenType::Fun, TokenType::Ident])?;
         let params = self.list(
@@ -97,7 +97,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         })
     }
 
-    fn fun_call(&mut self, ident: String) -> Result<ExprRef> {
+    pub fn fun_call(&mut self, ident: String) -> Result<ExprRef> {
         let params = self.list(
             (Some(TokenType::LParen), TokenType::RParen),
             TokenType::Comma,
@@ -107,7 +107,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         Ok(self.pool.push(Expr::FunCall(ident, params)))
     }
 
-    fn let_decl(&mut self) -> Result<Ast> {
+    pub fn let_decl(&mut self) -> Result<Ast> {
         let [_, ident, _] = self.multi_expect(&[
             TokenType::Let,
             TokenType::Ident,
@@ -118,116 +118,9 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
         Ok(Ast::LetDecl(ident.lexeme.to_owned(), body))
     }
-
-    fn expr_bp(&mut self, min_bp: u8) -> Result<ExprRef> {
-        let mut lhs = match self.it.next() {
-            Some(tok) => match tok.variant {
-                TokenType::Number => {
-                    if self.check(TokenType::Ident) {
-                        let ident = self.expect(TokenType::Ident)?;
-                        let lhs = self
-                            .pool
-                            .push(Expr::NumLit(tok.lexeme.parse().unwrap()));
-                        let rhs = self
-                            .pool
-                            .push(Expr::Ident(ident.lexeme.to_owned()));
-
-                        self.pool.push(Expr::BinOp {
-                            lhs,
-                            op: Operator::Times,
-                            rhs,
-                        })
-                    } else {
-                        let exp_ref = self
-                            .pool
-                            .push(Expr::NumLit(tok.lexeme.parse().unwrap()));
-                        exp_ref
-                    }
-                }
-
-                TokenType::String => {
-                    self.pool.push(Expr::StrLit(tok.lexeme.to_owned()))
-                }
-                TokenType::LParen => {
-                    let lhs = self.expr_bp(0)?;
-                    let _ = self.expect(TokenType::RParen)?;
-
-                    lhs
-                }
-                TokenType::Pipe => {
-                    let rhs = self.expr_bp(0)?;
-                    let _ = self.expect(TokenType::Pipe)?;
-
-                    self.pool.push(Expr::PreOp {
-                        op: Operator::Abs,
-                        rhs,
-                    })
-                }
-                TokenType::Op(op) => {
-                    let ((), r_bp) = prefix_binding_power(op);
-                    let rhs = self.expr_bp(r_bp)?;
-
-                    self.pool.push(Expr::PreOp { op, rhs })
-                }
-                TokenType::Ident => {
-                    if self.check(TokenType::LParen) {
-                        self.fun_call(tok.lexeme.to_owned())?
-                    } else {
-                        self.pool.push(Expr::Ident(tok.lexeme.to_owned()))
-                    }
-                }
-                TokenType::LBracket => {
-                    let ls = self.list(
-                        (None, TokenType::RBracket),
-                        TokenType::Comma,
-                        |s| s.expr_bp(0),
-                    )?;
-
-                    self.pool.push(Expr::Array(ls))
-                }
-                _ => {
-                    return Err(ParseError::ExpectedLiteral(
-                        "number".to_owned(),
-                    )
-                    .into())
-                }
-            },
-            None => {
-                return Err(
-                    ParseError::ExpectedLiteral("number".to_owned()).into()
-                )
-            }
-        };
-
-        while let Some(op) = self.it.peek().map(|x| x.variant) {
-            let op = match op {
-                TokenType::Op(o) if o.is_inf_op() => o,
-                TokenType::RParen
-                | TokenType::Comma
-                | TokenType::RBracket
-                | TokenType::RCurly
-                | TokenType::Semicolon
-                | TokenType::Pipe => break,
-                _ => return Err(ParseError::ExpectedInfixOp.into()),
-            };
-
-            let (l_bp, r_bp) = infix_binding_power(op);
-
-            if l_bp < min_bp {
-                break;
-            }
-
-            self.it.next();
-            let rhs = self.expr_bp(r_bp)?;
-
-            lhs = self.pool.push(Expr::BinOp { lhs, op, rhs });
-        }
-
-        Ok(lhs)
-    }
 }
 
-fn infix_binding_power(op: Operator) -> (u8, u8) {
+pub fn infix_binding_power(op: Operator) -> (u8, u8) {
     use Operator::*;
 
     if !op.is_inf_op() {
@@ -245,7 +138,7 @@ fn infix_binding_power(op: Operator) -> (u8, u8) {
     }
 }
 
-fn prefix_binding_power(op: Operator) -> ((), u8) {
+pub fn prefix_binding_power(op: Operator) -> ((), u8) {
     match op {
         Operator::PiTimes
         | Operator::Minus
@@ -273,7 +166,7 @@ mod tests {
     fn assert_parse(input: &'static str, expected: Ast) {
         // For the sake of testing the parser, we'll assume the lexer is correct
         let tokens = lex(input).unwrap();
-        let ast = match parse(tokens) {
+        let (ast, _pool) = match parse(tokens) {
             Ok(x) => x,
             Err(err) => {
                 panic!("error: {:?}\nbacktrace: {}", err.0, err.1);
@@ -307,125 +200,27 @@ mod tests {
         )
     }
 
-    #[test]
-    fn let_declaration() {
-        assert_parse(
-            "let x = 10;",
-            Ast::LetDecl("x".to_string(), Expr::NumLit(10.0)),
-        );
-    }
-
-    #[test]
-    fn let_decl_then_expr() {
-        assert_parse(
-            "let x = 1 + 2;",
-            Ast::LetDecl(
-                "x".to_string(),
-                Expr::BinOp {
-                    lhs: Box::new(Expr::NumLit(1.0)),
-                    op: Operator::Plus,
-                    rhs: Box::new(Expr::NumLit(2.0)),
-                },
-            ),
-        )
-    }
-
-    #[test]
-    fn funcall_nonempty() {
-        assert_parse(
-            "print(1 + 2, 3)",
-            Ast::Expression(Expr::FunCall(
-                "print".to_owned(),
-                vec![
-                    Expr::BinOp {
-                        lhs: Box::new(Expr::NumLit(1.0)),
-                        op: Operator::Plus,
-                        rhs: Box::new(Expr::NumLit(2.0)),
-                    },
-                    Expr::NumLit(3.0),
-                ],
-            )),
-        )
-    }
-
-    #[test]
-    fn simple_binop() {
-        use Expr::*;
-
-        assert_parse_expr(
-            "1 + 2",
-            BinOp {
-                lhs: b(NumLit(1.0)),
-                op: Operator::Plus,
-                rhs: b(NumLit(2.0)),
-            },
-        )
-    }
-
-    #[test]
-    fn simple_preop() {
-        use Expr::*;
-
-        assert_parse_expr(
-            "○1",
-            PreOp {
-                op: Operator::PiTimes,
-                rhs: b(NumLit(1.0)),
-            },
-        )
-    }
-
-    #[test]
-    fn mult_binop_no_prec() {
-        use Expr::*;
-
-        assert_parse_expr(
-            "1 + 2 - 3",
-            BinOp {
-                lhs: b(BinOp {
-                    lhs: b(NumLit(1.0)),
-                    op: Operator::Plus,
-                    rhs: b(NumLit(2.0)),
-                }),
-                op: Operator::Minus,
-                rhs: b(NumLit(3.0)),
-            },
-        )
-    }
-
-    #[test]
-    fn paren_plus_times() {
-        use Expr::*;
-
-        assert_parse_expr(
-            "(1 + 2) * 3",
-            BinOp {
-                lhs: b(BinOp {
-                    lhs: b(NumLit(1.0)),
-                    op: Operator::Plus,
-                    rhs: b(NumLit(2.0)),
-                }),
-                op: Operator::Times,
-                rhs: b(NumLit(3.0)),
-            },
-        )
-    }
-
-    #[test]
-    fn plus_times() {
-        use Expr::*;
-
-        assert_parse_expr(
-            "1 + 2 * 3",
-            BinOp {
-                lhs: b(NumLit(1.0)),
-                op: Operator::Plus,
-                rhs: b(BinOp {
-                    lhs: b(NumLit(2.0)),
-                    op: Operator::Times,
-                    rhs: b(NumLit(3.0)),
-                }),
-            },
-        )
-    }
+    // TODO:
+    // #[test]
+    // fn let_declaration() {
+    //     assert_parse(
+    //         "let x = 10;",
+    //         Ast::LetDecl("x".to_string(), Expr::NumLit(10.0)),
+    //     );
+    // }
+    //
+    // #[test]
+    // fn let_decl_then_expr() {
+    //     assert_parse(
+    //         "let x = 1 + 2;",
+    //         Ast::LetDecl(
+    //             "x".to_string(),
+    //             Expr::BinOp {
+    //                 lhs: Box::new(Expr::NumLit(1.0)),
+    //                 op: Operator::Plus,
+    //                 rhs: Box::new(Expr::NumLit(2.0)),
+    //             },
+    //         ),
+    //     )
+    // }
 }

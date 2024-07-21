@@ -7,7 +7,7 @@ use crate::{
 impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
     /// Consume the next token, error-ing if the type doesn't match what is expected
     pub fn expect(&mut self, ty: TokenType) -> Result<Token<'a>> {
-        Err(match self.0.next() {
+        Err(match self.it.next() {
             Some(t) if t.variant == ty => return Ok(t),
             Some(t) => ParseError::ExpectedFound(ty, t.variant).into(),
             None => ParseError::ExpectedFoundEof(ty).into(),
@@ -15,7 +15,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
     }
 
     pub fn check(&mut self, ty: TokenType) -> bool {
-        match self.0.peek() {
+        match self.it.peek() {
             Some(t) => t.variant == ty,
             None => false,
         }
@@ -51,9 +51,9 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         let mut xs = vec![];
 
         loop {
-            match self.0.peek() {
+            match self.it.peek() {
                 Some(tok) if tok.variant == delim.1 => {
-                    self.0.next();
+                    self.it.next();
                     break;
                 }
                 Some(_) => {
@@ -61,7 +61,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                     xs.push(x);
 
                     if self.check(delim.1) {
-                        self.0.next();
+                        self.it.next();
                         break;
                     }
 
