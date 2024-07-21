@@ -44,3 +44,9 @@ impl ExprPool {
 
 }
 
+impl Default for ExprPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+

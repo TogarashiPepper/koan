@@ -25,10 +25,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                             rhs,
                         })
                     } else {
-                        let exp_ref = self
-                            .pool
-                            .push(Expr::NumLit(tok.lexeme.parse().unwrap()));
-                        exp_ref
+                        self.pool
+                            .push(Expr::NumLit(tok.lexeme.parse().unwrap()))
                     }
                 }
 
