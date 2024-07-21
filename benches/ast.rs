@@ -4,13 +4,7 @@ use criterion::{
 use koan::{lexer::lex, parser::parse};
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let toks = lex(r#"
-        let thisisalongident = 2 + 3 * π / 3 + e * (2 / 3 + 1 ^ ○2222) - ○2;
-        print(|thisisalongident * -1|);
-
-        1 + thisisalongident
-        "#)
-    .unwrap();
+    let toks = lex(include_str!("../foo.koan")).unwrap();
 
     c.bench_function("ast", |b| {
         b.iter_batched(

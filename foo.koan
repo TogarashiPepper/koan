@@ -1,0 +1,46 @@
+fun func(one, two, three, four) {
+	print(one, two, three, four);
+	one * 2 + three / 2 ^ four - π * e
+}
+
+let thisisalongident = 2 + 3 * π / 3 + e * (2 / 3 + 1 ^ ○2222) - ○2;
+print(|thisisalongident * -1|);
+
+
+1 + thisisalongident;
+
+
+fun funca(one, two, three, four) {
+	print(one, two, three, four);
+	one * 2 + three / 2 ^ four - π * e
+}
+
+let thisisalongident = 2 + 3 * π / 3 + e * (2 / 3 + 1 ^ ○2222) - ○2;
+print(|thisisalongident * -1|);
+
+
+1 + thisisalongident;
+
+
+fun funcb(one, two, three, four) {
+	print(one, two, three, four);
+	one * 2 + three / 2 ^ four - π * e
+}
+
+let thisisalongident = 2 + 3 * π / 3 + e * (2 / 3 + 1 ^ ○2222) - ○2;
+print(|thisisalongident * -1|);
+
+
+1 + thisisalongident;
+
+
+fun funcc(one, two, three, four) {
+	print(one, two, three, four);
+	one * 2 + three / 2 ^ four - π * e
+}
+
+let thisisalongident = 2 + 3 * π / 3 + e * (2 / 3 + 1 ^ ○2222) - ○2;
+print(|thisisalongident * -1|);
+
+
+1 + thisisalongident;
