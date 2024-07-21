@@ -1,7 +1,7 @@
 use crate::{parser::Ast, value::Value};
 use std::{collections::HashMap, f64};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
     pub params: Vec<String>,
     pub body: Ast,

@@ -16,7 +16,7 @@ use syntect::{
 };
 
 use crate::{
-    error::Result, lexer::lex, parser::parse, state::State, value::Value,
+    error::Result, interpreter::IntrpCtx, lexer::lex, parser::parse, state::State, value::Value
 };
 
 #[derive(Helper, Completer, Hinter, Validator)]
@@ -106,12 +106,17 @@ pub fn repl() -> Result<()> {
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {
-                let mut stdout = stdout().lock();
+                let stdout = stdout().lock();
 
-                let ast = lex(&line).and_then(parse)?;
+                let (ast, pool) = lex(&line).and_then(parse)?;
+                let mut ctx = IntrpCtx {
+                    writer: stdout,
+                    state: &mut state,
+                    pool: &pool,
+                };
 
                 for statement in ast {
-                    let r = statement.eval(&mut state, &mut stdout)?;
+                    let r = ctx.eval_ast(statement)?;
                     if r != Value::Nothing {
                         println!("{}", r);
                     }
