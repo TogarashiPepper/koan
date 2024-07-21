@@ -3,7 +3,8 @@ use std::{collections::HashMap, rc::Rc};
 use crate::{
     error::{InterpreterError, Result},
     lexer::Operator,
-    parser::{Ast, Expr},
+    parser::Ast,
+    pool::{Expr, ExprPool, ExprRef},
     state::{Function, State},
     value::Value,
 };
@@ -11,25 +12,32 @@ use crate::{
 use core::f64;
 use std::io::Write;
 
-impl Expr {
-    pub fn eval<T: Write>(self, s: &mut State, out: &mut T) -> Result<Value> {
-        match self {
+pub struct IntrpCtx<'a, W> {
+    pub writer: W,
+    pub state: &'a mut State,
+    // Not strictly necessary, but to make it clear to the compiler that exprpool is immutable
+    pub pool: &'a ExprPool,
+}
+
+impl<W: Write> IntrpCtx<'_, W> {
+    pub fn eval(&mut self, exp_ref: ExprRef) -> Result<Value> {
+        match self.pool.get(exp_ref) {
             Expr::BinOp { lhs, op, rhs } if op.is_inf_op() => match op {
-                Operator::Plus => lhs.eval(s, out)? + rhs.eval(s, out)?,
-                Operator::Minus => lhs.eval(s, out)? - rhs.eval(s, out)?,
-                Operator::Times => lhs.eval(s, out)? * rhs.eval(s, out)?,
-                Operator::Slash => lhs.eval(s, out)? / rhs.eval(s, out)?,
+                Operator::Plus => self.eval(*lhs)? + self.eval(*rhs)?,
+                Operator::Minus => self.eval(*lhs)? - self.eval(*rhs)?,
+                Operator::Times => self.eval(*lhs)? * self.eval(*rhs)?,
+                Operator::Slash => self.eval(*lhs)? / self.eval(*rhs)?,
                 Operator::Power => {
-                    let l = lhs.eval(s, out)?;
-                    let r = rhs.eval(s, out)?;
+                    let l = self.eval(*lhs)?;
+                    let r = self.eval(*rhs)?;
 
                     l.pow(r)
                 }
                 Operator::DoubleEqual => Ok(Value::Num(
-                    (lhs.eval(s, out)? == rhs.eval(s, out)?) as u8 as f64,
+                    (self.eval(*lhs)? == self.eval(*rhs)?) as u8 as f64,
                 )),
                 Operator::NotEqual => Ok(Value::Num(
-                    (lhs.eval(s, out)? != rhs.eval(s, out)?) as u8 as f64,
+                    (self.eval(*lhs)? != self.eval(*rhs)?) as u8 as f64,
                 )),
                 Operator::DoubleAnd | Operator::DoublePipe => todo!(),
                 Operator::Greater
@@ -38,8 +46,8 @@ impl Expr {
                 | Operator::LesserEqual => {
                     use std::cmp::PartialOrd;
 
-                    let lhs = lhs.eval(s, out)?;
-                    let rhs = rhs.eval(s, out)?;
+                    let lhs = self.eval(*lhs)?;
+                    let rhs = self.eval(*rhs)?;
 
                     let op = match op {
                         Operator::Greater => PartialOrd::gt,
@@ -65,38 +73,40 @@ impl Expr {
                 }
                 _ => unreachable!(),
             },
+
             Expr::PreOp { op, rhs } if op.is_pre_op() => match op {
                 Operator::PiTimes => {
-                    rhs.eval(s, out)? * Value::Num(f64::consts::PI)
+                    self.eval(*rhs)? * Value::Num(f64::consts::PI)
                 }
                 Operator::Minus => {
-                    let res = rhs.eval(s, out)?;
+                    let res = self.eval(*rhs)?;
                     -res
                 }
                 Operator::Sqrt => {
-                    let res = rhs.eval(s, out)?;
+                    let res = self.eval(*rhs)?;
 
                     res.sqrt()
                 }
                 Operator::Not => {
-                    let res = rhs.eval(s, out)?;
+                    let res = self.eval(*rhs)?;
 
                     !res
                 }
                 Operator::Abs => {
-                    let res = rhs.eval(s, out)?;
+                    let res = self.eval(*rhs)?;
 
                     res.abs()
                 }
                 _ => unreachable!(),
             },
-            Expr::FunCall(name, mut params) => match name.as_str() {
+
+            Expr::FunCall(name, params) => match name.as_str() {
                 "print" => {
                     for p in params {
-                        let v = p.eval(s, out)?;
-                        write!(out, "{v} ").unwrap();
+                        let v = self.eval(*p)?;
+                        write!(self.writer, "{v} ").unwrap();
                     }
-                    writeln!(out).unwrap();
+                    writeln!(self.writer).unwrap();
 
                     Ok(Value::Nothing)
                 }
@@ -105,21 +115,23 @@ impl Expr {
 
                     if params.is_empty() {
                         return Err(InterpreterError::MismatchedArity(
-                            name,
+                            name.to_owned(),
                             params.len(),
                             1,
                         )
                         .into());
                     }
 
+                    let mut params = params.clone();
+
                     if params.len() == 1 {
-                        match params.pop().unwrap().eval(s, out)? {
-                            n @ Value::Num(_) => n.in_num(&name, f64::floor),
+                        match self.eval(params.pop().unwrap())? {
+                            n @ Value::Num(_) => n.in_num(name, f64::floor),
                             a @ Value::Array(_) => {
-                                a.map(|n| n.in_num(&name, f64::floor))
+                                a.map(|n| n.in_num(name, f64::floor))
                             }
                             t => Err(InterpreterError::InvalidParamTy(
-                                name,
+                                name.to_owned(),
                                 t.ty_str(),
                             )
                             .into()),
@@ -127,7 +139,7 @@ impl Expr {
                     } else {
                         let retvals = params
                             .into_iter()
-                            .map(|exp| exp.eval(s, out))
+                            .map(|exp| self.eval(exp))
                             .map(|x| x?.in_num("floor", f64::floor))
                             .collect::<Result<Vec<Value>>>()?;
 
@@ -137,19 +149,18 @@ impl Expr {
                 "range" => {
                     if params.len() != 1 {
                         return Err(InterpreterError::MismatchedArity(
-                            name,
+                            name.to_owned(),
                             params.len(),
                             1,
                         )
                         .into());
                     }
 
-                    let v = params
-                        .pop()
-                        .unwrap()
-                        .eval(s, out)?
-                        .as_num(name)?
-                        .floor() as u64;
+                    let mut params = params.clone();
+
+                    let v =
+                        self.eval(params.pop().unwrap())?.as_num(name)?.floor()
+                            as u64;
 
                     if v > 4096 {
                         return Err(InterpreterError::RangeTooLarge(v).into());
@@ -161,7 +172,7 @@ impl Expr {
 
                     Ok(Value::Array(Rc::new(arr)))
                 }
-                _ => match s.functions.get(&name) {
+                _ => match self.state.functions.get(name).cloned() {
                     Some(f) => {
                         // TODO: dont do this, figure out something better for perf
                         let p_names = f.params.clone();
@@ -169,27 +180,36 @@ impl Expr {
 
                         assert_eq!(p_names.len(), p_exprs.len());
 
-                        let mut fn_scope = State::new();
+                        let mut old_scope = State::new();
+                        // Replace current scope with the function's scope
+                        std::mem::swap(self.state, &mut old_scope);
 
                         for (pn, pe) in p_names.into_iter().zip(p_exprs) {
-                            let v = pe.eval(&mut fn_scope, out)?;
-                            fn_scope.set(pn, v);
+                            let v = self.eval(*pe)?;
+                            self.state.set(pn, v);
                         }
 
                         // TODO: dont do this (x2), maybe some way to share/eval by-ref
-                        f.body.clone().eval(&mut fn_scope, out)
+                        let res = self.eval_ast(f.body.clone());
+                        // Set the current scope back to the non-function one
+                        std::mem::swap(self.state, &mut old_scope);
+
+                        res
                     }
-                    None => Err(InterpreterError::UndefFunc(name).into()),
+                    None => {
+                        Err(InterpreterError::UndefFunc(name.to_owned()).into())
+                    }
                 },
             },
-            Expr::Ident(ident) => s
-                .get(&ident)
-                .ok_or_else(|| InterpreterError::UndefVar(ident).into()),
-            Expr::StrLit(s) => Ok(Value::UTF8(s)),
-            Expr::NumLit(n) => Ok(Value::Num(n)),
+
+            Expr::Ident(ident) => self.state.get(ident).ok_or_else(|| {
+                InterpreterError::UndefVar(ident.to_owned()).into()
+            }),
+            Expr::StrLit(s) => Ok(Value::UTF8(s.to_owned())),
+            Expr::NumLit(n) => Ok(Value::Num(*n)),
             Expr::Array(a) => Ok(Value::Array(
-                a.into_iter()
-                    .map(|x| x.eval(s, out))
+                a.iter()
+                    .map(|x| self.eval(*x))
                     .collect::<Result<Vec<Value>>>()?
                     .into(),
             )),
@@ -197,39 +217,37 @@ impl Expr {
             Expr::PreOp { .. } => unreachable!(),
         }
     }
-}
 
-impl Ast {
-    pub fn eval<T: Write>(self, s: &mut State, out: &mut T) -> Result<Value> {
-        match self {
-            Ast::Expression(e) => e.eval(s, out),
+    pub fn eval_ast(&mut self, ast: Ast) -> Result<Value> {
+        match ast {
+            Ast::Expression(e) => self.eval(e),
             Ast::LetDecl(ident, body) => {
                 if ident == "π" {
                     return Err(InterpreterError::AssignmentToPi.into());
                 }
 
-                let v = body.eval(s, out)?;
-                s.set(ident, v);
+                let v = self.eval(body)?;
+                self.state.set(ident, v);
                 Ok(Value::Nothing)
             }
             Ast::Statement(e) => {
-                let _ = e.eval(s, out)?;
+                let _ = self.eval(e)?;
                 Ok(Value::Nothing)
             }
             Ast::Block(mut b) => {
                 // Enter new scope
-                s.variables.push(HashMap::new());
+                self.state.variables.push(HashMap::new());
 
                 let last = b.pop();
 
                 for node in b {
-                    node.eval(s, out)?;
+                    self.eval_ast(node)?;
                 }
 
                 Ok(match last {
                     Some(a) => {
-                        let res = a.eval(s, out)?;
-                        s.variables.pop();
+                        let res = self.eval_ast(a)?;
+                        self.state.variables.pop();
 
                         res
                     }
@@ -237,11 +255,11 @@ impl Ast {
                 })
             }
             Ast::FunDecl { name, params, body } => {
-                if s.variables.len() != 1 {
+                if self.state.variables.len() != 1 {
                     return Err(InterpreterError::NonTopLevelFnDef.into());
                 }
 
-                s.functions.insert(
+                self.state.functions.insert(
                     name,
                     Function {
                         params,
@@ -259,13 +277,22 @@ impl Ast {
 mod tests {
     use std::{io::stdout, rc::Rc};
 
-    use crate::{lexer::lex, parser::parse, state::State, value::Value};
+    use crate::{
+        interpreter::IntrpCtx, lexer::lex, parser::parse, state::State,
+        value::Value,
+    };
 
     fn assert_interp(input: &'static str, expected: Value) {
-        let mut state = State::new();
-        let mut stdout = stdout().lock();
-        let ast = lex(input).and_then(parse).unwrap().pop().unwrap();
-        let val = ast.eval(&mut state, &mut stdout).unwrap();
+        let (mut ast, pool) = lex(input).and_then(parse).unwrap();
+        let ast = ast.pop().unwrap();
+
+        let mut ctx = IntrpCtx {
+            writer: stdout().lock(),
+            state: &mut State::new(),
+            pool: &pool,
+        };
+
+        let val = ctx.eval_ast(ast).unwrap();
 
         assert_eq!(val, expected);
     }

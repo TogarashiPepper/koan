@@ -2,6 +2,7 @@ use std::{io::stdout, path::PathBuf, process::exit};
 
 use koan::{
     error::{handle_err, CliError, KoanError, Result},
+    interpreter::IntrpCtx,
     lexer::lex,
     parser::parse,
     state::State,
@@ -34,13 +35,17 @@ fn run_file(path: PathBuf) -> Result<()> {
     let file = std::fs::read_to_string(path)
         .map_err(|err| KoanError::from(CliError::FileError(err.kind())))?;
     let mut state = State::new();
-    let mut stdout = stdout().lock();
 
     let tokens = lex(&file)?;
-    let ast = parse(tokens)?;
+    let (ast, pool) = parse(tokens)?;
+    let mut ctx = IntrpCtx {
+        writer: stdout().lock(),
+        state: &mut state,
+        pool: &pool,
+    };
 
     for statement in ast {
-        let _ = statement.eval(&mut state, &mut stdout)?;
+        let _ = ctx.eval_ast(statement)?;
     }
 
     Ok(())

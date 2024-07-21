@@ -29,13 +29,14 @@ impl Value {
         }
     }
 
-    pub fn as_num(&self, fn_name: String) -> Result<f64> {
+    pub fn as_num(&self, fn_name: &str) -> Result<f64> {
         match self {
             Value::Num(n) => Ok(*n),
-            t => {
-                Err(InterpreterError::InvalidParamTy(fn_name, t.ty_str())
-                    .into())
-            }
+            t => Err(InterpreterError::InvalidParamTy(
+                fn_name.to_owned(),
+                t.ty_str(),
+            )
+            .into()),
         }
     }
 
