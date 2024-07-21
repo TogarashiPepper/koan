@@ -8,6 +8,13 @@ rustyline = { version = "14.0.0", features = ["derive"], optional = true }
 syntect = { version = "5.2.0", optional = true }
 thiserror = "1.0.62"
 
+[dev-dependencies]
+criterion = { version = "0.4", features = ["html_reports"] }
+
+[[bench]]
+name = "ast"
+harness = false
+
 [features]
 default = ["repl"]
 repl = ["dep:rustyline", "dep:syntect"]
