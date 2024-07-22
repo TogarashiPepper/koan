@@ -14,7 +14,7 @@ contexts:
     - include: identifiers
 
   keywords:
-    - match: '\b(let|fun)\b'
+    - match: '\b(let|fun|if|else)\b'
       scope: keyword.other.koan
 
   strings:
