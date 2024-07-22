@@ -1,4 +1,4 @@
-use crate::lexer::Operator;
+use crate::{lexer::Operator, parser::Ast};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
@@ -18,6 +18,11 @@ pub enum Expr {
     StrLit(String),
     FunCall(String, Vec<ExprRef>),
     Array(Vec<ExprRef>),
+    IfElse {
+        cond: ExprRef,
+        body: Ast,
+        else_body: Option<Ast>,
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

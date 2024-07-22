@@ -22,17 +22,27 @@ pub enum Ast {
 }
 
 pub fn parse(tokens: Vec<Token<'_>>) -> Result<(Vec<Ast>, ExprPool)> {
+    let mut pool = ExprPool::new();
+    let res = parse_with_pool(tokens, &mut pool)?;
+
+    Ok((res, pool))
+}
+
+pub fn parse_with_pool(
+    tokens: Vec<Token<'_>>,
+    pool: &mut ExprPool,
+) -> Result<Vec<Ast>> {
     let mut it = TokenStream {
         it: tokens.into_iter().peekable(),
-        pool: ExprPool::new(),
+        pool,
     };
 
-    Ok((it.program(false)?, it.pool))
+    it.program(false)
 }
 
 pub struct TokenStream<'a, T: Iterator<Item = Token<'a>>> {
     pub it: Peekable<T>,
-    pub pool: ExprPool,
+    pub pool: &'a mut ExprPool,
 }
 
 impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {

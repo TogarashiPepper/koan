@@ -70,6 +70,23 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
                     self.pool.push(Expr::Array(ls))
                 }
+                TokenType::If => {
+                    let cond = self.expr_bp(0)?;
+                    let body = self.block()?;
+
+                    let mut else_body = None;
+
+                    if self.check(TokenType::Else) {
+                        let _ = self.expect(TokenType::Else)?;
+                        else_body = Some(self.block()?);
+                    }
+
+                    self.pool.push(Expr::IfElse {
+                        cond,
+                        body,
+                        else_body,
+                    })
+                }
                 _ => {
                     return Err(ParseError::ExpectedLiteral(
                         "number".to_owned(),
@@ -90,6 +107,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                 TokenType::RParen
                 | TokenType::Comma
                 | TokenType::RBracket
+                | TokenType::LCurly
                 | TokenType::RCurly
                 | TokenType::Semicolon
                 | TokenType::Pipe => break,

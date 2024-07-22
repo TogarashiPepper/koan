@@ -16,7 +16,7 @@ use syntect::{
 };
 
 use crate::{
-    error::Result, interpreter::IntrpCtx, lexer::lex, parser::parse, state::State, value::Value
+    error::Result, interpreter::IntrpCtx, lexer::lex, parser::{parse, parse_with_pool}, pool::ExprPool, state::State, value::Value
 };
 
 #[derive(Helper, Completer, Hinter, Validator)]
@@ -98,6 +98,7 @@ pub fn repl() -> Result<()> {
     let mut rl = Editor::with_config(config).unwrap();
     rl.set_helper(Some(h));
     let mut state = State::new();
+    let mut pool = ExprPool::new();
 
     loop {
         let p = "λ ".to_owned();
@@ -108,7 +109,7 @@ pub fn repl() -> Result<()> {
             Ok(line) => {
                 let stdout = stdout().lock();
 
-                let (ast, pool) = lex(&line).and_then(parse)?;
+                let ast = lex(&line).and_then(|tks| parse_with_pool(tks, &mut pool))?;
                 let mut ctx = IntrpCtx {
                     writer: stdout,
                     state: &mut state,

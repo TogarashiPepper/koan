@@ -39,7 +39,22 @@ impl<W: Write> IntrpCtx<'_, W> {
                 Operator::NotEqual => Ok(Value::Num(
                     (self.eval(*lhs)? != self.eval(*rhs)?) as u8 as f64,
                 )),
-                Operator::DoubleAnd | Operator::DoublePipe => todo!(),
+                Operator::DoubleAnd => {
+                    let lhs = self.eval(*lhs)?;
+                    let rhs = self.eval(*rhs)?;
+
+                    let res = lhs == Value::Num(1.0) && rhs == Value::Num(1.0);
+
+                    Ok(Value::Num(res as u8 as f64))
+                }
+                Operator::DoublePipe => {
+                    let lhs = self.eval(*lhs)?;
+                    let rhs = self.eval(*rhs)?;
+
+                    let res = lhs == Value::Num(1.0) || rhs == Value::Num(1.0);
+
+                    Ok(Value::Num(res as u8 as f64))
+                }
                 Operator::Greater
                 | Operator::GreaterEqual
                 | Operator::Lesser
@@ -180,21 +195,29 @@ impl<W: Write> IntrpCtx<'_, W> {
 
                         assert_eq!(p_names.len(), p_exprs.len());
 
-                        let mut old_scope = State::new();
-                        // Replace current scope with the function's scope
-                        std::mem::swap(self.state, &mut old_scope);
+                        let mut old_vars = State::new().variables;
 
                         for (pn, pe) in p_names.into_iter().zip(p_exprs) {
                             let v = self.eval(*pe)?;
-                            self.state.set(pn, v);
+                            old_vars.last_mut().unwrap().insert(pn, v);
                         }
 
-                        // TODO: dont do this (x2), maybe some way to share/eval by-ref
-                        let res = self.eval_ast(f.body.clone());
-                        // Set the current scope back to the non-function one
-                        std::mem::swap(self.state, &mut old_scope);
+                        // Replace current scope with the function's scope
+                        std::mem::swap(
+                            &mut self.state.variables,
+                            &mut old_vars,
+                        );
 
-                        res
+                        // TODO: dont do this (x2), maybe some way to share/eval by-ref
+                        let res = self.eval_ast(f.body.clone())?;
+
+                        // Set the current scope back to the non-function one
+                        std::mem::swap(
+                            &mut self.state.variables,
+                            &mut old_vars,
+                        );
+
+                        Ok(res)
                     }
                     None => {
                         Err(InterpreterError::UndefFunc(name.to_owned()).into())
@@ -215,6 +238,31 @@ impl<W: Write> IntrpCtx<'_, W> {
             )),
             Expr::BinOp { .. } => unreachable!(),
             Expr::PreOp { .. } => unreachable!(),
+            Expr::IfElse {
+                cond,
+                body,
+                else_body,
+            } => {
+                let boolean = self.eval(*cond)?;
+                let mut res = Value::Nothing;
+
+                match boolean {
+                    Value::Num(n) => {
+                        if n == 1.0 {
+                            res = self.eval_ast(body.clone())?;
+                        } else if n == 0.0 {
+                            if let Some(x) = else_body {
+                                res = self.eval_ast(x.clone())?;
+                            }
+                        } else {
+                            return Err(InterpreterError::InvalidIfNum.into());
+                        }
+
+                        Ok(res)
+                    }
+                    _ => Err(InterpreterError::InvalidIfTy.into()),
+                }
+            }
         }
     }
 

@@ -45,6 +45,8 @@ pub enum TokenType {
     LBracket,
     RBracket,
     Pipe,
+    If,
+    Else,
 }
 
 impl Operator {
@@ -269,6 +271,8 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
                     match &input[idx..=end + oc.len_utf8() - 1] {
                         "let" => TokenType::Let,
                         "fun" => TokenType::Fun,
+                        "if" => TokenType::If,
+                        "else" => TokenType::Else,
                         other => {
                             if other != "π" && other.contains('π') {
                                 return Err(LexError::InvalidToken(

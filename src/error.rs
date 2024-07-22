@@ -59,6 +59,10 @@ pub enum InterpreterError {
     RangeTooLarge(u64),
     #[error("Cannot define functions outside of the top level")]
     NonTopLevelFnDef,
+    #[error("The conditional in an if expression must be of type `number`")]
+    InvalidIfTy,
+    #[error("The conditional in an if expression must be `1` or `0`")]
+    InvalidIfNum,
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -112,7 +116,7 @@ pub fn handle_err(err: KoanError) -> String {
     match err.0 {
         KoanErrorType::LexErr(e) => format!("{e}"),
         KoanErrorType::ParseErr(e) => format!("{e}"),
-        KoanErrorType::InterpErr(e) => format!("{e}"),
+        KoanErrorType::InterpErr(e) => format!("value: {e}\nbacktrace: {}", err.1),
         KoanErrorType::CliErr(e) => format!("{e}"),
     }
 }
