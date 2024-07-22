@@ -29,11 +29,15 @@ pub enum Expr {
 pub struct ExprRef(usize);
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ExprPool(Vec<Expr>);
+pub struct ExprPool(pub Vec<Expr>);
 
 impl ExprPool {
     pub fn new() -> Self {
         ExprPool(vec![])
+    }
+
+    pub fn with_capacity(n: usize) -> Self {
+        ExprPool(Vec::with_capacity(n))
     }
 
     pub fn get(&self, exp_ref: ExprRef) -> &Expr {

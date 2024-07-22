@@ -194,13 +194,15 @@ mod tests {
     }
 
     pub fn parse_expr(tokens: Vec<Token<'_>>) -> Result<(ExprPool, ExprRef)> {
+        let mut pool = ExprPool::new();
+
         let mut it = TokenStream {
             it: tokens.into_iter().peekable(),
-            pool: ExprPool::new(),
+            pool: &mut pool,
         };
 
         let exp = it.expr_bp(0)?;
-        Ok((it.pool, exp))
+        Ok((pool, exp))
     }
 
     fn assert_expr<F: FnOnce(&mut ExprPool) -> ExprRef>(input: &str, func: F) {

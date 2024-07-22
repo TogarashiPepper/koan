@@ -22,7 +22,7 @@ pub enum Ast {
 }
 
 pub fn parse(tokens: Vec<Token<'_>>) -> Result<(Vec<Ast>, ExprPool)> {
-    let mut pool = ExprPool::new();
+    let mut pool = ExprPool::with_capacity(200);
     let res = parse_with_pool(tokens, &mut pool)?;
 
     Ok((res, pool))
