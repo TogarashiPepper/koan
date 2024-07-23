@@ -1,46 +1,204 @@
-fun func(one, two, three, four) {
-	print(one, two, three, four);
-	one * 2 + three / 2 ^ four - π * e
+let x = |○1  ^ √2 + 3 - 4 * 5 / 6 == 7 > 8 >= 9 < 10 <= 11 != 12|;
+
+let y = !x;
+
+fun fibonacci(n) {
+	if n <= 1 {
+		n
+	}
+	else {
+		fibonacci(n - 1) + fibonacci(n - 2)
+	}
 }
 
-let thisisalongident = 2 + 3 * π / 3 + e * (2 / 3 + 1 ^ ○2222) - ○2;
-print(|thisisalongident * -1|);
+let z = x + fibonacci(y) - 20;
+print(z + 1);
+print("Hello, Benchmark!")
 
-
-1 + thisisalongident;
-
-
-fun funca(one, two, three, four) {
-	print(one, two, three, four);
-	one * 2 + three / 2 ^ four - π * e
+{
+	let inner = 2;
 }
 
-let thisisalongident = 2 + 3 * π / 3 + e * (2 / 3 + 1 ^ ○2222) - ○2;
-print(|thisisalongident * -1|);
+let x = |○1  ^ √2 + 3 - 4 * 5 / 6 == 7 > 8 >= 9 < 10 <= 11 != 12|;
 
+let y = !x;
 
-1 + thisisalongident;
-
-
-fun funcb(one, two, three, four) {
-	print(one, two, three, four);
-	one * 2 + three / 2 ^ four - π * e
+fun fibonacci(n) {
+	if n <= 1 {
+		n
+	}
+	else {
+		fibonacci(n - 1) + fibonacci(n - 2)
+	}
 }
 
-let thisisalongident = 2 + 3 * π / 3 + e * (2 / 3 + 1 ^ ○2222) - ○2;
-print(|thisisalongident * -1|);
+let z = x + fibonacci(y) - 20;
+print(z + 1);
+print("Hello, Benchmark!")
 
-
-1 + thisisalongident;
-
-
-fun funcc(one, two, three, four) {
-	print(one, two, three, four);
-	one * 2 + three / 2 ^ four - π * e
+{
+	let inner = 2;
 }
 
-let thisisalongident = 2 + 3 * π / 3 + e * (2 / 3 + 1 ^ ○2222) - ○2;
-print(|thisisalongident * -1|);
+let x = |○1  ^ √2 + 3 - 4 * 5 / 6 == 7 > 8 >= 9 < 10 <= 11 != 12|;
 
+let y = !x;
 
-1 + thisisalongident;
+fun fibonacci(n) {
+	if n <= 1 {
+		n
+	}
+	else {
+		fibonacci(n - 1) + fibonacci(n - 2)
+	}
+}
+
+let z = x + fibonacci(y) - 20;
+print(z + 1);
+print("Hello, Benchmark!")
+
+{
+	let inner = 2;
+}
+
+let x = |○1  ^ √2 + 3 - 4 * 5 / 6 == 7 > 8 >= 9 < 10 <= 11 != 12|;
+
+let y = !x;
+
+fun fibonacci(n) {
+	if n <= 1 {
+		n
+	}
+	else {
+		fibonacci(n - 1) + fibonacci(n - 2)
+	}
+}
+
+let z = x + fibonacci(y) - 20;
+print(z + 1);
+print("Hello, Benchmark!")
+
+{
+	let inner = 2;
+}
+let x = |○1  ^ √2 + 3 - 4 * 5 / 6 == 7 > 8 >= 9 < 10 <= 11 != 12|;
+
+let y = !x;
+
+fun fibonacci(n) {
+	if n <= 1 {
+		n
+	}
+	else {
+		fibonacci(n - 1) + fibonacci(n - 2)
+	}
+}
+
+let z = x + fibonacci(y) - 20;
+print(z + 1);
+print("Hello, Benchmark!")
+
+{
+	let inner = 2;
+}
+let x = |○1  ^ √2 + 3 - 4 * 5 / 6 == 7 > 8 >= 9 < 10 <= 11 != 12|;
+
+let y = !x;
+
+fun fibonacci(n) {
+	if n <= 1 {
+		n
+	}
+	else {
+		fibonacci(n - 1) + fibonacci(n - 2)
+	}
+}
+
+let z = x + fibonacci(y) - 20;
+print(z + 1);
+print("Hello, Benchmark!")
+
+{
+	let inner = 2;
+}
+let x = |○1  ^ √2 + 3 - 4 * 5 / 6 == 7 > 8 >= 9 < 10 <= 11 != 12|;
+
+let y = !x;
+
+fun fibonacci(n) {
+	if n <= 1 {
+		n
+	}
+	else {
+		fibonacci(n - 1) + fibonacci(n - 2)
+	}
+}
+
+let z = x + fibonacci(y) - 20;
+print(z + 1);
+print("Hello, Benchmark!")
+
+{
+	let inner = 2;
+}
+let x = |○1  ^ √2 + 3 - 4 * 5 / 6 == 7 > 8 >= 9 < 10 <= 11 != 12|;
+
+let y = !x;
+
+fun fibonacci(n) {
+	if n <= 1 {
+		n
+	}
+	else {
+		fibonacci(n - 1) + fibonacci(n - 2)
+	}
+}
+
+let z = x + fibonacci(y) - 20;
+print(z + 1);
+print("Hello, Benchmark!")
+
+{
+	let inner = 2;
+}
+let x = |○1  ^ √2 + 3 - 4 * 5 / 6 == 7 > 8 >= 9 < 10 <= 11 != 12|;
+
+let y = !x;
+
+fun fibonacci(n) {
+	if n <= 1 {
+		n
+	}
+	else {
+		fibonacci(n - 1) + fibonacci(n - 2)
+	}
+}
+
+let z = x + fibonacci(y) - 20;
+print(z + 1);
+print("Hello, Benchmark!")
+
+{
+	let inner = 2;
+}
+let x = |○1  ^ √2 + 3 - 4 * 5 / 6 == 7 > 8 >= 9 < 10 <= 11 != 12|;
+
+let y = !x;
+
+fun fibonacci(n) {
+	if n <= 1 {
+		n
+	}
+	else {
+		fibonacci(n - 1) + fibonacci(n - 2)
+	}
+}
+
+let z = x + fibonacci(y) - 20;
+print(z + 1);
+print("Hello, Benchmark!")
+
+{
+	let inner = 2;
+}
+
