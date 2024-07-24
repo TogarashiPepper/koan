@@ -77,6 +77,10 @@ pub enum CliError {
 pub enum VmError {
     #[error("`{0}` is not a valid OpCode")]
     InvalidOpCode(u8),
+    #[error("Tried to pop a value off the stack but it was empty")]
+    StackEmpty,
+    #[error("The program counter was out of bounds")]
+    PcOutOfBounds,
 }
 
 #[derive(Debug, PartialEq)]
