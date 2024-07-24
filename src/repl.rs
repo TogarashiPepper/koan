@@ -16,7 +16,8 @@ use syntect::{
 };
 
 use crate::{
-    error::Result, interpreter::IntrpCtx, lexer::lex, parser::{parse, parse_with_pool}, pool::ExprPool, state::State, value::Value
+    error::Result, interpreter::IntrpCtx, lexer::lex, parser::parse_with_pool,
+    pool::ExprPool, state::State, value::Value,
 };
 
 #[derive(Helper, Completer, Hinter, Validator)]
@@ -109,7 +110,8 @@ pub fn repl() -> Result<()> {
             Ok(line) => {
                 let stdout = stdout().lock();
 
-                let ast = lex(&line).and_then(|tks| parse_with_pool(tks, &mut pool))?;
+                let ast = lex(&line)
+                    .and_then(|tks| parse_with_pool(tks, &mut pool))?;
                 let mut ctx = IntrpCtx {
                     writer: stdout,
                     state: &mut state,
