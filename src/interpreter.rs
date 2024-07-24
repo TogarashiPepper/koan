@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    error::{InterpreterError, Result},
+    error::{InterpError, Result},
     lexer::Operator,
     parser::Ast,
     pool::{Expr, ExprPool, ExprRef},
@@ -129,7 +129,7 @@ impl<W: Write> IntrpCtx<'_, W> {
                     // TODO: get some helpers to assert common preconditions: arity, types etc.
 
                     if params.is_empty() {
-                        return Err(InterpreterError::MismatchedArity(
+                        return Err(InterpError::MismatchedArity(
                             name.to_owned(),
                             params.len(),
                             1,
@@ -145,7 +145,7 @@ impl<W: Write> IntrpCtx<'_, W> {
                             a @ Value::Array(_) => {
                                 a.map(|n| n.in_num(name, f64::floor))
                             }
-                            t => Err(InterpreterError::InvalidParamTy(
+                            t => Err(InterpError::InvalidParamTy(
                                 name.to_owned(),
                                 t.ty_str(),
                             )
@@ -163,7 +163,7 @@ impl<W: Write> IntrpCtx<'_, W> {
                 }
                 "range" => {
                     if params.len() != 1 {
-                        return Err(InterpreterError::MismatchedArity(
+                        return Err(InterpError::MismatchedArity(
                             name.to_owned(),
                             params.len(),
                             1,
@@ -178,7 +178,7 @@ impl<W: Write> IntrpCtx<'_, W> {
                             as u64;
 
                     if v > 4096 {
-                        return Err(InterpreterError::RangeTooLarge(v).into());
+                        return Err(InterpError::RangeTooLarge(v).into());
                     }
 
                     let arr = (0..v)
@@ -220,13 +220,13 @@ impl<W: Write> IntrpCtx<'_, W> {
                         Ok(res)
                     }
                     None => {
-                        Err(InterpreterError::UndefFunc(name.to_owned()).into())
+                        Err(InterpError::UndefFunc(name.to_owned()).into())
                     }
                 },
             },
 
             Expr::Ident(ident) => self.state.get(ident).ok_or_else(|| {
-                InterpreterError::UndefVar(ident.to_owned()).into()
+                InterpError::UndefVar(ident.to_owned()).into()
             }),
             Expr::StrLit(s) => Ok(Value::UTF8(s.to_owned())),
             Expr::NumLit(n) => Ok(Value::Num(*n)),
@@ -255,12 +255,12 @@ impl<W: Write> IntrpCtx<'_, W> {
                                 res = self.eval_ast(x.clone())?;
                             }
                         } else {
-                            return Err(InterpreterError::InvalidIfNum.into());
+                            return Err(InterpError::InvalidIfNum.into());
                         }
 
                         Ok(res)
                     }
-                    _ => Err(InterpreterError::InvalidIfTy.into()),
+                    _ => Err(InterpError::InvalidIfTy.into()),
                 }
             }
         }
@@ -271,7 +271,7 @@ impl<W: Write> IntrpCtx<'_, W> {
             Ast::Expression(e) => self.eval(e),
             Ast::LetDecl(ident, body) => {
                 if ident == "π" {
-                    return Err(InterpreterError::AssignmentToPi.into());
+                    return Err(InterpError::AssignmentToPi.into());
                 }
 
                 let v = self.eval(body)?;
@@ -304,7 +304,7 @@ impl<W: Write> IntrpCtx<'_, W> {
             }
             Ast::FunDecl { name, params, body } => {
                 if self.state.variables.len() != 1 {
-                    return Err(InterpreterError::NonTopLevelFnDef.into());
+                    return Err(InterpError::NonTopLevelFnDef.into());
                 }
 
                 self.state.functions.insert(

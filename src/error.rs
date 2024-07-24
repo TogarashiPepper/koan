@@ -32,7 +32,7 @@ pub enum ParseError {
 }
 
 #[derive(Error, Debug, PartialEq)]
-pub enum InterpreterError {
+pub enum InterpError {
     /// 1st parameter is the lhs, 2nd is the rhs.
     #[error("Cannot apply operator `{0:?}` to types `{1}` and `{2}`")]
     MismatchedTypes(Operator, &'static str, &'static str),
@@ -71,37 +71,38 @@ pub enum CliError {
     FileError(std::io::ErrorKind),
 }
 
+/// For errors that are caused by malformed input or some kind of internal error in the VM.
+/// Errors that are the fault of the user should be in `InterprError`
+#[derive(Error, Debug, PartialEq)]
+pub enum VmError {
+    #[error("`{0}` is not a valid OpCode")]
+    InvalidOpCode(u8),
+}
+
 #[derive(Debug, PartialEq)]
 pub enum KoanErrorType {
-    LexErr(LexError),
-    ParseErr(ParseError),
-    InterpErr(InterpreterError),
-    CliErr(CliError),
+    LexError(LexError),
+    ParseError(ParseError),
+    InterpError(InterpError),
+    CliError(CliError),
+    VmError(VmError),
 }
 
-impl From<ParseError> for KoanError {
-    fn from(value: ParseError) -> Self {
-        KoanError(KoanErrorType::ParseErr(value), Backtrace::capture())
-    }
+macro_rules! gen_from {
+    ($tyname:ident) => {
+        impl From<$tyname> for KoanError {
+            fn from(value: $tyname) -> KoanError {
+                KoanError(KoanErrorType::$tyname(value), Backtrace::capture())
+            }
+        }
+    };
 }
 
-impl From<LexError> for KoanError {
-    fn from(value: LexError) -> Self {
-        KoanError(KoanErrorType::LexErr(value), Backtrace::capture())
-    }
-}
-
-impl From<InterpreterError> for KoanError {
-    fn from(value: InterpreterError) -> Self {
-        KoanError(KoanErrorType::InterpErr(value), Backtrace::capture())
-    }
-}
-
-impl From<CliError> for KoanError {
-    fn from(value: CliError) -> Self {
-        KoanError(KoanErrorType::CliErr(value), Backtrace::capture())
-    }
-}
+gen_from!(ParseError);
+gen_from!(LexError);
+gen_from!(InterpError);
+gen_from!(CliError);
+gen_from!(VmError);
 
 #[derive(Debug)]
 pub struct KoanError(pub KoanErrorType, pub std::backtrace::Backtrace);
@@ -114,9 +115,12 @@ impl PartialEq for KoanError {
 
 pub fn handle_err(err: KoanError) -> String {
     match err.0 {
-        KoanErrorType::LexErr(e) => format!("{e}"),
-        KoanErrorType::ParseErr(e) => format!("{e}"),
-        KoanErrorType::InterpErr(e) => format!("value: {e}\nbacktrace: {}", err.1),
-        KoanErrorType::CliErr(e) => format!("{e}"),
+        KoanErrorType::LexError(e) => format!("{e}"),
+        KoanErrorType::ParseError(e) => format!("{e}"),
+        KoanErrorType::InterpError(e) => {
+            format!("value: {e}\nbacktrace: {}", err.1)
+        }
+        KoanErrorType::CliError(e) => format!("{e}"),
+        KoanErrorType::VmError(e) => format!("{e}, if you're seeing this it's likely a bug in the compiler"),
     }
 }
