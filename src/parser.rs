@@ -163,12 +163,6 @@ mod tests {
     use super::*;
     use crate::{lexer::lex, parser::Ast};
 
-    // `Box::new` is a lot to write across all test cases, and `box` is reserved so while single-char
-    // func name is a bit yucky, I think its worth the marginally shorter test cases.
-    fn b<T>(x: T) -> Box<T> {
-        Box::new(x)
-    }
-
     fn assert_parse_expr(input: &'static str, expected: ExprRef) {
         assert_parse(input, Ast::Expression(expected));
     }

@@ -254,37 +254,35 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
                 (Some(Op(Lesser)), Op(LesserEqual)),
             )?,
             oc @ ('a'..='z' | 'A'..='Z' | '_' | 'π') => {
-                let mut end = idx;
-                while let Some((_, k)) = it.peek() {
-                    let k = *k;
+                let mut len = 0;
 
-                    if k.is_alphanumeric() || k == '_' {
+                while let Some((_, c)) = it.peek() {
+                    let c = *c;
+
+                    if matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_') {
                         it.next();
 
-                        end += k.len_utf8();
+                        len += 1;
                     } else {
                         break;
                     }
                 }
 
-                builder.second(end - idx).variant(
-                    match &input[idx..=end + oc.len_utf8() - 1] {
-                        "let" => TokenType::Let,
-                        "fun" => TokenType::Fun,
-                        "if" => TokenType::If,
-                        "else" => TokenType::Else,
-                        other => {
-                            if other != "π" && other.contains('π') {
-                                return Err(LexError::InvalidToken(
-                                    "π".to_owned(),
-                                )
-                                .into());
-                            } else {
-                                TokenType::Ident
-                            }
+                builder.second(len).variant(match &input[idx..idx + len + oc.len_utf8()] {
+                    "let" => TokenType::Let,
+                    "fun" => TokenType::Fun,
+                    "if" => TokenType::If,
+                    "else" => TokenType::Else,
+                    other => {
+                        if other != "π" && other.contains('π') {
+                            return Err(
+                                LexError::InvalidToken("π".to_owned()).into()
+                            );
+                        } else {
+                            TokenType::Ident
                         }
-                    },
-                )
+                    }
+                })
             }
             '0'..='9' => {
                 let mut end = idx;
@@ -371,16 +369,22 @@ mod tests {
     }
 
     fn lex_single(input: &'static str, expected: TokenType) {
-        let got = lex(input);
+        let Ok(got) = lex(input) else {
+            panic!("lexer failed in test :(");
+        };
+
+        assert_eq!(got.len(), 1);
 
         assert_eq!(
-            got,
-            ok(Token {
+            got[0],
+            Token {
                 variant: expected,
                 location: 0..input.len(),
                 lexeme: &input[0..input.len()]
-            })
-        )
+            }
+        );
+
+        assert_eq!(&input[got[0].location.clone()], got[0].lexeme);
     }
 
     #[test]
@@ -391,6 +395,46 @@ mod tests {
     #[test]
     fn lex_ident_p1() {
         lex_single("p1", Ident);
+    }
+
+    #[test]
+    fn lex_2pi() {
+        let input = "2π+";
+        let Ok(got) = lex(input) else {
+            panic!("lexer failed in test :(");
+        };
+
+        assert_eq!(got.len(), 3);
+
+        assert_eq!(
+            got[0],
+            Token {
+                variant: Number,
+                location: 0..1,
+                lexeme: "2",
+            }
+        );
+        assert_eq!(&input[got[0].location.clone()], got[0].lexeme);
+
+        assert_eq!(
+            got[1],
+            Token {
+                variant: Ident,
+                location: 1..3,
+                lexeme: "π",
+            }
+        );
+        assert_eq!(&input[got[1].location.clone()], got[1].lexeme);
+
+        assert_eq!(
+            got[2],
+            Token {
+                variant: Op(Plus),
+                location: 3..4,
+                lexeme: "+"
+            }
+        );
+        assert_eq!(&input[got[2].location.clone()], got[2].lexeme);
     }
 
     #[test]
@@ -414,6 +458,11 @@ mod tests {
     }
 
     #[test]
+    fn lex_pi() {
+        lex_single("π", TokenType::Ident);
+    }
+
+    #[test]
     fn lex_plus() {
         lex_single("+", Op(Plus));
     }
@@ -431,6 +480,14 @@ mod tests {
     #[test]
     fn lex_slash() {
         lex_single("/", Op(Slash));
+    }
+
+    #[test]
+    fn lex_keywords() {
+        lex_single("fun", Fun);
+        lex_single("let", Let);
+        lex_single("if", If);
+        lex_single("else", Else);
     }
 
     #[test]
