@@ -1,7 +1,7 @@
 use std::{
     iter::{Map, Peekable},
     ops::Range,
-    str::Chars,
+    str::{CharIndices, Chars},
 };
 
 use crate::error::{LexError, Result};
@@ -121,7 +121,7 @@ impl<'a> TokenBuilder<'a> {
     /// there's no fallback variant.
     fn variant_pair(
         self,
-        iterator: &mut Peekable<Map<Chars, impl FnMut(char) -> (usize, char)>>,
+        iterator: &mut Peekable<CharIndices<'_>>,
         (first_char, next_char): (char, char),
         (single_char_token, char_pair_token): (Option<TokenType>, TokenType),
     ) -> Result<TokenBuilder<'a>> {
@@ -178,17 +178,8 @@ impl<'a> TokenBuilder<'a> {
 
 pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
     let mut res = vec![];
-    let mut idx = 0;
     // Poor man's enumerate that accounts for multi-byte characters
-    let mut it = input
-        .chars()
-        .map(|c| {
-            let tmp = idx;
-            idx += c.len_utf8();
-
-            (tmp, c)
-        })
-        .peekable();
+    let mut it = input.char_indices().peekable();
 
     while let Some((idx, c)) = it.next() {
         use Operator::*;
@@ -268,21 +259,24 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
                     }
                 }
 
-                builder.second(len).variant(match &input[idx..idx + len + oc.len_utf8()] {
-                    "let" => TokenType::Let,
-                    "fun" => TokenType::Fun,
-                    "if" => TokenType::If,
-                    "else" => TokenType::Else,
-                    other => {
-                        if other != "π" && other.contains('π') {
-                            return Err(
-                                LexError::InvalidToken("π".to_owned()).into()
-                            );
-                        } else {
-                            TokenType::Ident
+                builder.second(len).variant(
+                    match &input[idx..idx + len + oc.len_utf8()] {
+                        "let" => TokenType::Let,
+                        "fun" => TokenType::Fun,
+                        "if" => TokenType::If,
+                        "else" => TokenType::Else,
+                        other => {
+                            if other != "π" && other.contains('π') {
+                                return Err(LexError::InvalidToken(
+                                    "π".to_owned(),
+                                )
+                                .into());
+                            } else {
+                                TokenType::Ident
+                            }
                         }
-                    }
-                })
+                    },
+                )
             }
             '0'..='9' => {
                 let mut end = idx;
