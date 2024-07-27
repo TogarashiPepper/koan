@@ -1,9 +1,9 @@
 use crate::{
+    error::{InterpError, Result},
     lexer::Operator,
     parser::Ast,
     pool::{Expr, ExprPool, ExprRef},
     value::ValTy,
-    error::Result,
 };
 
 /// Performs type inference on the provided Ast
@@ -12,17 +12,68 @@ pub fn infer(ast: Ast, pool: ExprPool) -> Ast {
 }
 
 pub fn infer_exp(expr: ExprRef, pool: &ExprPool) -> Result<ValTy> {
+    use ValTy::{Array, Nothing, Number, String};
+
     let exp = pool.get(expr);
 
     Ok(match exp {
         Expr::BinOp { lhs, op, rhs } => {
+            let lhs = infer_exp(*lhs, pool)?;
+            let rhs = infer_exp(*rhs, pool)?;
+
             match op {
-                Operator::Power => todo!(),
-                Operator::Plus => todo!(),
-                Operator::Minus => todo!(),
-                Operator::Times => {
-                    match (infer_exp(lhs, pool), infer_exp(rhs, pool)) {
-                        _ => todo!()
+                Operator::Power => match (lhs, rhs) {
+                    (Array, Array) | (Number, Array) | (Array, Number) => Array,
+                    (Number, Number) => Number,
+
+                    (l, r) => {
+                        return Err(InterpError::MismatchedTypes(
+                            Operator::Power,
+                            l,
+                            r,
+                        )
+                        .into())
+                    }
+                },
+                Operator::Plus => match (lhs, rhs) {
+                    (Number, Number) => Number,
+                    (Array, Number) | (Number, Array) | (Array, Array) => Array,
+                    (String, String) => String,
+
+                    (l, r) => {
+                        return Err(InterpError::MismatchedTypes(
+                            Operator::Plus,
+                            l,
+                            r,
+                        )
+                        .into())
+                    }
+                },
+                Operator::Minus => match (lhs, rhs) {
+                    (Number, Number) => Number,
+                    (Number, Array) | (Array, Number) | (Array, Array) => Array,
+
+                    (l, r) => {
+                        return Err(InterpError::MismatchedTypes(
+                            Operator::Minus,
+                            l,
+                            r,
+                        )
+                        .into())
+                    }
+                },
+                Operator::Times => match (lhs, rhs) {
+                    (Number, Array) | (Array, Number) | (Array, Array) => Array,
+                    (String, Number) | (Number, String) => String,
+                    (Number, Number) => Number,
+
+                    (l, r) => {
+                        return Err(InterpError::MismatchedTypes(
+                            Operator::Times,
+                            l,
+                            r,
+                        )
+                        .into())
                     }
                 },
                 Operator::Slash
@@ -33,15 +84,29 @@ pub fn infer_exp(expr: ExprRef, pool: &ExprPool) -> Result<ValTy> {
                 | Operator::LesserEqual
                 | Operator::NotEqual
                 | Operator::DoublePipe
-                | Operator::DoubleAnd => ValTy::Number,
+                | Operator::DoubleAnd => Number,
 
                 _ => unreachable!(),
             }
         }
-        Expr::PreOp { op, rhs } => todo!(),
+        Expr::PreOp { op, rhs } => {
+            let rhs = infer_exp(*rhs, pool)?;
+            match rhs {
+                Number => Number,
+                Array => Array,
+
+                r => {
+                    return Err(InterpError::MismatchedUnOp(
+                        Operator::PiTimes,
+                        r,
+                    )
+                    .into())
+                }
+            }
+        }
         Expr::Ident(_) => todo!(),
-        Expr::NumLit(_) => ValTy::Number,
-        Expr::StrLit(_) => ValTy::String,
+        Expr::NumLit(_) => Number,
+        Expr::StrLit(_) => String,
         Expr::FunCall(_, _) => todo!(),
         Expr::Array(_) => ValTy::Array,
         Expr::IfElse {
