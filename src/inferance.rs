@@ -1,10 +1,16 @@
+use std::collections::HashMap;
+
 use crate::{
-    error::{InterpError, Result},
-    lexer::Operator,
-    parser::Ast,
-    pool::{Expr, ExprPool, ExprRef},
-    value::ValTy,
+    error::{InterpError, Result}, lexer::Operator, parser::Ast, pool::{Expr, ExprPool, ExprRef}, state::Function, value::ValTy
 };
+
+
+#[derive(Debug)]
+pub struct StateSim {
+    // Array of environments, index = depth (i.e. `0` = global scope)
+    pub variables: Vec<HashMap<String, Option<ValTy>>>,
+    pub functions: HashMap<String, Function>,
+}
 
 /// Performs type inference on the provided Ast
 pub fn infer(ast: Ast, pool: ExprPool) -> Ast {
@@ -12,7 +18,7 @@ pub fn infer(ast: Ast, pool: ExprPool) -> Ast {
 }
 
 pub fn infer_exp(expr: ExprRef, pool: &ExprPool) -> Result<ValTy> {
-    use ValTy::{Array, Nothing, Number, String};
+    use ValTy::{Array, Number, String};
 
     let exp = pool.get(expr);
 
@@ -89,7 +95,7 @@ pub fn infer_exp(expr: ExprRef, pool: &ExprPool) -> Result<ValTy> {
                 _ => unreachable!(),
             }
         }
-        Expr::PreOp { op, rhs } => {
+        Expr::PreOp { op: _, rhs } => {
             let rhs = infer_exp(*rhs, pool)?;
             match rhs {
                 Number => Number,
@@ -104,11 +110,11 @@ pub fn infer_exp(expr: ExprRef, pool: &ExprPool) -> Result<ValTy> {
                 }
             }
         }
-        Expr::Ident(_) => todo!(),
         Expr::NumLit(_) => Number,
         Expr::StrLit(_) => String,
+        Expr::Array(_) => Array,
+        Expr::Ident(_) => todo!(),
         Expr::FunCall(_, _) => todo!(),
-        Expr::Array(_) => ValTy::Array,
         Expr::IfElse {
             cond,
             body,
