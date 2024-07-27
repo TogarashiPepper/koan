@@ -6,6 +6,7 @@ use crate::{
     error::{ParseError, Result},
     lexer::{Operator, Token, TokenType},
     pool::{Expr, ExprPool, ExprRef},
+    value::ValTy,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -13,10 +14,14 @@ pub enum Ast {
     Expression(ExprRef),
     Statement(ExprRef),
     Block(Vec<Ast>),
-    LetDecl(String, ExprRef),
+    LetDecl {
+        name: String,
+        ty: Option<ValTy>,
+        body: ExprRef,
+    },
     FunDecl {
         name: String,
-        params: Vec<String>,
+        params: Vec<(String, ValTy)>,
         body: Box<Ast>,
     },
 }
@@ -92,6 +97,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
     pub fn fun_def(&mut self) -> Result<Ast> {
         let [_, ident] =
             self.multi_expect(&[TokenType::Fun, TokenType::Ident])?;
+        // TODO: parse type annotations
         let params = self.list(
             (Some(TokenType::LParen), TokenType::RParen),
             TokenType::Comma,
@@ -102,7 +108,10 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
         Ok(Ast::FunDecl {
             name: ident.lexeme.to_owned(),
-            params: params.into_iter().map(|t| t.lexeme.to_string()).collect(),
+            params: params
+                .into_iter()
+                .map(|t| (t.lexeme.to_string(), ValTy::Number))
+                .collect(),
             body: Box::new(block),
         })
     }
@@ -126,7 +135,11 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         let body = self.expr_bp(0)?;
         let _ = self.expect(TokenType::Semicolon)?;
 
-        Ok(Ast::LetDecl(ident.lexeme.to_owned(), body))
+        Ok(Ast::LetDecl {
+            name: ident.lexeme.to_owned(),
+            body,
+            ty: todo!(),
+        })
     }
 }
 
@@ -186,7 +199,11 @@ mod tests {
             "fun foo(p1, p2, p3) {}",
             Ast::FunDecl {
                 name: "foo".to_owned(),
-                params: vec!["p1".to_owned(), "p2".to_owned(), "p3".to_owned()],
+                params: vec![
+                    ("p1".to_owned(), ValTy::Number),
+                    ("p2".to_owned(), ValTy::Number),
+                    ("p3".to_owned(), ValTy::Number),
+                ],
                 body: Box::new(Ast::Block(vec![])),
             },
         )

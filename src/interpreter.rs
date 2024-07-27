@@ -199,7 +199,16 @@ impl<W: Write> IntrpCtx<'_, W> {
 
                         for (pn, pe) in p_names.into_iter().zip(p_exprs) {
                             let v = self.eval(*pe)?;
-                            old_vars.last_mut().unwrap().insert(pn, v);
+
+                            if v.ty_str() != pn.1 {
+                                return Err(InterpError::InvalidParamTy(
+                                    name.to_owned(),
+                                    v.ty_str(),
+                                )
+                                .into());
+                            }
+
+                            old_vars.last_mut().unwrap().insert(pn.0, v);
                         }
 
                         // Replace current scope with the function's scope
@@ -219,15 +228,14 @@ impl<W: Write> IntrpCtx<'_, W> {
 
                         Ok(res)
                     }
-                    None => {
-                        Err(InterpError::UndefFunc(name.to_owned()).into())
-                    }
+                    None => Err(InterpError::UndefFunc(name.to_owned()).into()),
                 },
             },
 
-            Expr::Ident(ident) => self.state.get(ident).ok_or_else(|| {
-                InterpError::UndefVar(ident.to_owned()).into()
-            }),
+            Expr::Ident(ident) => self
+                .state
+                .get(ident)
+                .ok_or_else(|| InterpError::UndefVar(ident.to_owned()).into()),
             Expr::StrLit(s) => Ok(Value::UTF8(s.to_owned())),
             Expr::NumLit(n) => Ok(Value::Num(*n)),
             Expr::Array(a) => Ok(Value::Array(
@@ -269,7 +277,11 @@ impl<W: Write> IntrpCtx<'_, W> {
     pub fn eval_ast(&mut self, ast: Ast) -> Result<Value> {
         match ast {
             Ast::Expression(e) => self.eval(e),
-            Ast::LetDecl(ident, body) => {
+            Ast::LetDecl {
+                name: ident,
+                body,
+                ty: _,
+            } => {
                 if ident == "π" {
                     return Err(InterpError::AssignmentToPi.into());
                 }

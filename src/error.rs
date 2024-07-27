@@ -1,7 +1,7 @@
 use std::backtrace::Backtrace;
 use thiserror::Error;
 
-use crate::lexer::{Operator, TokenType};
+use crate::{lexer::{Operator, TokenType}, value::ValTy};
 
 pub type Result<T> = std::result::Result<T, KoanError>;
 
@@ -35,13 +35,13 @@ pub enum ParseError {
 pub enum InterpError {
     /// 1st parameter is the lhs, 2nd is the rhs.
     #[error("Cannot apply operator `{0:?}` to types `{1}` and `{2}`")]
-    MismatchedTypes(Operator, &'static str, &'static str),
+    MismatchedTypes(Operator, ValTy, ValTy),
     #[error("Attempted to divide by zero")]
     DivByZero,
     #[error("Variable `{0}` is undefined")]
     UndefVar(String),
     #[error("Cannot apply unary operator `{0:?}` for type `{1}`")]
-    MismatchedUnOp(Operator, &'static str),
+    MismatchedUnOp(Operator, ValTy),
     #[error("Function `{0}` is undefined")]
     UndefFunc(String),
     /// Fields are: name, received arity, expected arity
@@ -54,7 +54,7 @@ pub enum InterpError {
     #[error("Cannot shadow or reassign to `π`")]
     AssignmentToPi,
     #[error("Function `{0}` did not expect argument of type {1}")]
-    InvalidParamTy(String, &'static str),
+    InvalidParamTy(String, ValTy),
     #[error("Array of {0} elements would be too large")]
     RangeTooLarge(u64),
     #[error("Cannot define functions outside of the top level")]

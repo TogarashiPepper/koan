@@ -9,3 +9,4 @@ pub mod repl;
 pub mod state;
 pub mod value;
 pub mod vm;
+mod inferance;

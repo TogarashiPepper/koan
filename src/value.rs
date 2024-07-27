@@ -1,5 +1,5 @@
 use std::{
-    fmt::Write,
+    fmt::{Display, Write},
     ops::{Add, Div, Mul, Neg, Not, Sub},
     rc::Rc,
 };
@@ -19,13 +19,34 @@ pub enum Value {
     Nothing,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValTy {
+    Number,
+    String,
+    Array,
+    Nothing,
+}
+
+impl Display for ValTy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let res = match self {
+            ValTy::Number => "number",
+            ValTy::String => "string",
+            ValTy::Array => "array",
+            ValTy::Nothing => "nothing",
+        };
+
+        write!(f, "{}", res)
+    }
+}
+
 impl Value {
-    pub fn ty_str(&self) -> &'static str {
+    pub fn ty_str(&self) -> ValTy {
         match self {
-            Value::Num(_) => "number",
-            Value::UTF8(_) => "string",
-            Value::Nothing => "nothing",
-            Value::Array(_) => "array",
+            Value::Num(_) => ValTy::Number,
+            Value::UTF8(_) => ValTy::String,
+            Value::Nothing =>  ValTy::Nothing,
+            Value::Array(_) => ValTy::Array,
         }
     }
 
