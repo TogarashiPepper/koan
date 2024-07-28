@@ -270,63 +270,61 @@ impl<W: Write> IntrpCtx<'_, W> {
     }
 
     pub fn eval_ast(&mut self, ast: Ast) -> Result<Value> {
-        println!("{:#?}", annotate(ast, self.pool));
-        Ok(Value::Nothing)
-        // match ast {
-        //     Ast::Expression(e) => self.eval(e),
-        //     Ast::LetDecl {
-        //         name: ident,
-        //         body,
-        //         ty: _,
-        //     } => {
-        //         if ident == "π" {
-        //             return Err(InterpError::AssignmentToPi.into());
-        //         }
-        //
-        //         let v = self.eval(body)?;
-        //         self.state.set(ident, v);
-        //         Ok(Value::Nothing)
-        //     }
-        //     Ast::Statement(e) => {
-        //         let _ = self.eval(e)?;
-        //         Ok(Value::Nothing)
-        //     }
-        //     Ast::Block(mut b) => {
-        //         // Enter new scope
-        //         self.state.variables.push(HashMap::new());
-        //
-        //         let last = b.pop();
-        //
-        //         for node in b {
-        //             self.eval_ast(node)?;
-        //         }
-        //
-        //         Ok(match last {
-        //             Some(a) => {
-        //                 let res = self.eval_ast(a)?;
-        //                 self.state.variables.pop();
-        //
-        //                 res
-        //             }
-        //             None => Value::Nothing,
-        //         })
-        //     }
-        //     Ast::FunDecl { name, params, body } => {
-        //         if self.state.variables.len() != 1 {
-        //             return Err(InterpError::NonTopLevelFnDef.into());
-        //         }
-        //
-        //         self.state.functions.insert(
-        //             name,
-        //             Function {
-        //                 params,
-        //                 body: *body,
-        //             },
-        //         );
-        //
-        //         Ok(Value::Nothing)
-        //     }
-        // }
+        match ast {
+            Ast::Expression(e) => self.eval(e),
+            Ast::LetDecl {
+                name: ident,
+                body,
+                ty: _,
+            } => {
+                if ident == "π" {
+                    return Err(InterpError::AssignmentToPi.into());
+                }
+
+                let v = self.eval(body)?;
+                self.state.set(ident, v);
+                Ok(Value::Nothing)
+            }
+            Ast::Statement(e) => {
+                let _ = self.eval(e)?;
+                Ok(Value::Nothing)
+            }
+            Ast::Block(mut b) => {
+                // Enter new scope
+                self.state.variables.push(HashMap::new());
+
+                let last = b.pop();
+
+                for node in b {
+                    self.eval_ast(node)?;
+                }
+
+                Ok(match last {
+                    Some(a) => {
+                        let res = self.eval_ast(a)?;
+                        self.state.variables.pop();
+
+                        res
+                    }
+                    None => Value::Nothing,
+                })
+            }
+            Ast::FunDecl { name, params, body } => {
+                if self.state.variables.len() != 1 {
+                    return Err(InterpError::NonTopLevelFnDef.into());
+                }
+
+                self.state.functions.insert(
+                    name,
+                    Function {
+                        params,
+                        body: *body,
+                    },
+                );
+
+                Ok(Value::Nothing)
+            }
+        }
     }
 }
 
