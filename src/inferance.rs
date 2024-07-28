@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    error::{InterpError, Result},
+    error::{InterpError, KoanError, Result},
     lexer::Operator,
     parser::Ast,
     pool::{Expr, ExprPool, ExprRef},
@@ -42,29 +42,35 @@ pub fn infer(
     state_sim: &mut StateSim,
 ) -> Result<ValTy> {
     match ast {
-        Ast::Expression(e) => infer_exp(e, pool, todo!()),
+        Ast::Expression(e) => infer_exp(*e, pool, state_sim),
         Ast::Statement(_) => Ok(ValTy::Nothing),
         Ast::Block(statements) => {
             state_sim.variables.push(HashMap::new());
             let len = statements.len();
 
             if len >= 2 {
-                for stmt in &statements[0..len - 2] {
-                    infer(stmt, pool, state_sim);
+                for stmt in &statements[0..=len - 2] {
+                    // We don't care about the type but we want any variables registered to be
+                    // added to `state_sim`
+                    let _ = infer(stmt, pool, state_sim)?;
                 }
             }
 
-            if len >= 1 {
+            let res = if len >= 1 {
                 let ret_val = &statements[len - 1];
 
                 infer(ret_val, pool, state_sim)
             } else {
                 Ok(ValTy::Nothing)
-            }
+            };
+
+            state_sim.variables.pop();
+
+            res
         }
-        Ast::LetDecl { name, ty, body } => {
-            let infered = infer_exp(*body, pool, todo!())?;
-            state_sim.set(name.to_owned(), infered);
+        Ast::LetDecl { name, ty: _, body } => {
+            let infered = infer_exp(*body, pool, state_sim)?;
+            state_sim.set(name.to_owned(), infered.clone());
 
             Ok(infered)
         }
@@ -82,14 +88,34 @@ pub fn annotate(ast: Ast, pool: &ExprPool) -> Result<Ast> {
         functions: HashMap::new(),
     };
 
+    annotate_inner(ast, pool, &mut state_sim)
+}
+
+fn annotate_inner(
+    ast: Ast,
+    pool: &ExprPool,
+    sim: &mut StateSim,
+) -> Result<Ast> {
     match ast {
-        Ast::Expression(_) | Ast::Statement(_) | Ast::Block(_) => Ok(ast),
+        Ast::Expression(_) | Ast::Statement(_) => Ok(ast),
+        b @ Ast::Block(_) => {
+            infer(&b, pool, sim)?;
+
+            let Ast::Block(stmts) = b else { unreachable!() };
+
+            let stmts = stmts
+                .into_iter()
+                .map(|st| annotate_inner(st, pool, sim))
+                .collect::<Result<Vec<Ast>>>()?;
+
+            Ok(Ast::Block(stmts))
+        }
         Ast::LetDecl {
             ref name,
             ty: _,
             body,
         } => {
-            let inferred = infer(&ast, pool, &mut state_sim)?;
+            let inferred = infer(&ast, pool, sim)?;
             let annotated = Ast::LetDecl {
                 name: name.to_owned(),
                 ty: Some(inferred),
@@ -106,22 +132,19 @@ pub fn annotate(ast: Ast, pool: &ExprPool) -> Result<Ast> {
 /// identifier and infers the type of the value held by that idenftifier. This parameter is used to
 /// allow the inference for the AST to provide the `Expr` the information it needs without
 /// providing it the entire scope tree every time.
-pub fn infer_exp<F>(
+pub fn infer_exp(
     expr: ExprRef,
     pool: &ExprPool,
-    resolve: &mut F,
-) -> Result<ValTy>
-where
-    F: FnMut(String) -> Result<ValTy>,
-{
+    state_sim: &mut StateSim,
+) -> Result<ValTy> {
     use ValTy::{Array, Number, String};
 
     let exp = pool.get(expr);
 
     Ok(match exp {
         Expr::BinOp { lhs, op, rhs } => {
-            let lhs = infer_exp(*lhs, pool, resolve)?;
-            let rhs = infer_exp(*rhs, pool, resolve)?;
+            let lhs = infer_exp(*lhs, pool, state_sim)?;
+            let rhs = infer_exp(*rhs, pool, state_sim)?;
 
             match op {
                 Operator::Power => match (lhs, rhs) {
@@ -192,7 +215,7 @@ where
             }
         }
         Expr::PreOp { op: _, rhs } => {
-            let rhs = infer_exp(*rhs, pool, resolve)?;
+            let rhs = infer_exp(*rhs, pool, state_sim)?;
             match rhs {
                 Number => Number,
                 Array => Array,
@@ -209,7 +232,9 @@ where
         Expr::NumLit(_) => Number,
         Expr::StrLit(_) => String,
         Expr::Array(_) => Array,
-        Expr::Ident(name) => resolve(name.to_owned())?,
+        Expr::Ident(name) => state_sim.get(name).ok_or_else(|| {
+            KoanError::from(InterpError::UndefVar(name.to_owned()))
+        })?,
         Expr::FunCall(_, _) => todo!(),
         Expr::IfElse {
             cond,

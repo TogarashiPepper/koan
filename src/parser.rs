@@ -138,7 +138,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         Ok(Ast::LetDecl {
             name: ident.lexeme.to_owned(),
             body,
-            ty: todo!(),
+            ty: None,
         })
     }
 }
