@@ -4,7 +4,9 @@ use inkwell::{
     execution_engine::JitFunction,
     module::Module,
     types::{BasicTypeEnum, FloatType},
-    values::{BasicMetadataValueEnum, BasicValue, FloatValue},
+    values::{
+        BasicMetadataValueEnum, BasicValue, FloatValue, FunctionValue, GlobalValue,
+    },
     AddressSpace, FloatPredicate, OptimizationLevel,
 };
 
@@ -14,20 +16,44 @@ use crate::{
     pool::{Expr, ExprPool, ExprRef},
 };
 
+fn create_printf<'a>(
+    context: &'a Context,
+    module: &Module<'a>,
+) -> (FunctionValue<'a>, GlobalValue<'a>) {
+    let printf_format = "%f\n";
+    let printf_format_type = context
+        .i8_type()
+        .array_type((printf_format.len() + 1) as u32);
+    let printf_format_global =
+        module.add_global(printf_format_type, None, "write_format");
+
+    printf_format_global
+        .set_initializer(&context.const_string(printf_format.as_bytes(), true));
+
+    let printf_args = [context.ptr_type(AddressSpace::default()).into()];
+
+    let printf_type = context.f32_type().fn_type(&printf_args, true);
+    let printf_fn = module.add_function("printf", printf_type, None);
+
+    (printf_fn, printf_format_global)
+}
+
 struct RecursiveBuilder<'a> {
     f64_t: FloatType<'a>,
     module: Module<'a>,
     context: &'a Context,
-    builder: &'a Builder<'a>,
+    builder: Builder<'a>,
+    pool: ExprPool,
+    printf: (FunctionValue<'a>, GlobalValue<'a>),
 }
 
 impl<'a> RecursiveBuilder<'a> {
-    pub fn new(
-        f64_t: FloatType<'a>,
-        module: Module<'a>,
-        builder: &'a Builder<'a>,
-        context: &'a Context,
-    ) -> Self {
+    pub fn new(context: &'a Context, pool: ExprPool) -> Self {
+        let module = context.create_module("main");
+        let f64_t = context.f64_type();
+        let builder = context.create_builder();
+        let printf = create_printf(context, &module);
+
         let bin_intrinsic_type = f64_t.fn_type(&[f64_t.into(), f64_t.into()], false);
         let un_intrinsic_type = f64_t.fn_type(&[f64_t.into()], false);
         module.add_function("llvm.pow.f64", bin_intrinsic_type, None);
@@ -55,6 +81,8 @@ impl<'a> RecursiveBuilder<'a> {
             module,
             builder,
             context,
+            pool,
+            printf,
         }
     }
 
@@ -62,7 +90,20 @@ impl<'a> RecursiveBuilder<'a> {
         llvm_jit_exec(self.module);
     }
 
-    pub fn emit_main_func(&self, ast: Ast, pool: &ExprPool) {
+    fn emit_print<'c, 'b: 'c>(&'b self, value: ExprRef) -> Result<(), BuilderError> {
+        let value = self.build(value)?;
+
+        let args: &[BasicMetadataValueEnum<'c>] =
+            &[self.printf.1.as_pointer_value().into(), value.into()];
+
+        self.builder
+            .build_call(self.printf.0, args, "write_call")
+            .unwrap();
+
+        Ok(())
+    }
+
+    pub fn emit_main_func(&self, ast: Ast) {
         let fn_type = self.f64_t.fn_type(&[], false);
         let function = self.module.add_function("main", fn_type, None);
         let basic_block = self.context.append_basic_block(function, "entry");
@@ -72,7 +113,7 @@ impl<'a> RecursiveBuilder<'a> {
         let Ast::Expression(ast) = ast else {
             unreachable!()
         };
-        let sum = self.build(ast, pool).unwrap();
+        let sum = self.build(ast).unwrap();
 
         self.builder.build_return(Some(&sum)).unwrap();
 
@@ -97,18 +138,14 @@ impl<'a> RecursiveBuilder<'a> {
         Ok(res)
     }
 
-    pub fn build(
-        &self,
-        ast: ExprRef,
-        pool: &ExprPool,
-    ) -> Result<FloatValue, BuilderError> {
-        let exp_ref = pool.get(ast);
+    pub fn build(&self, ast: ExprRef) -> Result<FloatValue, BuilderError> {
+        let exp_ref = self.pool.get(ast);
 
         match exp_ref {
             Expr::NumLit(n) => Ok(self.f64_t.const_float(*n)),
             Expr::PreOp { op, rhs } => {
                 let op = *op;
-                let child = self.build(*rhs, pool)?;
+                let child = self.build(*rhs)?;
 
                 match op {
                     Operator::PiTimes => self.builder.build_float_mul(
@@ -128,8 +165,8 @@ impl<'a> RecursiveBuilder<'a> {
 
             Expr::BinOp { lhs, op, rhs } => {
                 let op = *op;
-                let lhs = self.build(*lhs, pool)?;
-                let rhs = self.build(*rhs, pool)?;
+                let lhs = self.build(*lhs)?;
+                let rhs = self.build(*rhs)?;
 
                 match op {
                     Operator::Power => self
@@ -175,7 +212,19 @@ impl<'a> RecursiveBuilder<'a> {
             }
             Expr::Ident(_) => todo!(),
             Expr::StrLit(_) => todo!(),
-            Expr::FunCall(_, _) => todo!(),
+            Expr::FunCall(name, args) => {
+                match name.as_str() {
+                    "print" => {
+                        for arg in args {
+                            self.emit_print(*arg)?;
+                        }
+
+                        Ok(self.f64_t.const_zero())
+                    },
+                     
+                    _ => todo!(),
+                }
+            },
             Expr::Array(_) => todo!(),
             Expr::IfElse {
                 cond,
@@ -187,14 +236,10 @@ impl<'a> RecursiveBuilder<'a> {
 }
 
 pub fn compile(_ast: Ast, _pool: ExprPool) {
+    let (ast, pool) = lex("print(3 ^ 3, 1)").and_then(parse).unwrap();
     let context = Context::create();
-    let module = context.create_module("main");
-    let f64_ty = context.f64_type();
-    let builder = context.create_builder();
-
-    let codegen = RecursiveBuilder::new(f64_ty, module, &builder, &context);
-    let (ast, pool) = lex("√100").and_then(parse).unwrap();
-    codegen.emit_main_func(ast[0].clone(), &pool);
+    let codegen = RecursiveBuilder::new(&context, pool);
+    codegen.emit_main_func(ast[0].clone());
     codegen.exec();
 }
 
