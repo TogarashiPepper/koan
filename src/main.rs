@@ -6,29 +6,33 @@ use koan::{
     lexer::lex,
     parser::parse,
     state::State,
+    compiler::compile,
 };
 
 #[cfg(feature = "repl")]
 use koan::repl::repl;
 
 fn main() {
-    let mut arg_it = std::env::args();
-    arg_it.next();
-    let arg = arg_it.next().unwrap_or_else(|| "repl".to_owned());
+    let garbage = lex("1 + 2").and_then(parse).unwrap();
+    compile(garbage.0[0].clone(), garbage.1);
 
-    if arg == "repl" {
-        #[cfg(feature = "repl")]
-        if let Err(err) = repl() {
-            eprintln!("{}", handle_err(err));
-            exit(1);
-        }
-    } else {
-        let path: PathBuf = arg.into();
-        if let Err(err) = run_file(path) {
-            eprintln!("{}", handle_err(err));
-            exit(1);
-        }
-    }
+    // let mut arg_it = std::env::args();
+    // arg_it.next();
+    // let arg = arg_it.next().unwrap_or_else(|| "repl".to_owned());
+    //
+    // if arg == "repl" {
+    //     #[cfg(feature = "repl")]
+    //     if let Err(err) = repl() {
+    //         eprintln!("{}", handle_err(err));
+    //         exit(1);
+    //     }
+    // } else {
+    //     let path: PathBuf = arg.into();
+    //     if let Err(err) = run_file(path) {
+    //         eprintln!("{}", handle_err(err));
+    //         exit(1);
+    //     }
+    // }
 }
 
 fn run_file(path: PathBuf) -> Result<()> {
