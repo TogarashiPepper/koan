@@ -3,14 +3,14 @@ use inkwell::{
     context::Context,
     execution_engine::JitFunction,
     module::Module,
-    types::{FloatType, IntType},
-    values::{FloatValue, IntValue},
-    OptimizationLevel,
+    types::FloatType,
+    values::{BasicMetadataValueEnum, BasicValue, FloatValue},
+    FloatPredicate, OptimizationLevel,
 };
 
 use crate::{
-    lexer::Operator,
-    parser::Ast,
+    lexer::{lex, Operator},
+    parser::{parse, Ast},
     pool::{Expr, ExprPool, ExprRef},
 };
 
@@ -28,8 +28,10 @@ impl<'a> RecursiveBuilder<'a> {
         builder: &'a Builder<'a>,
         context: &'a Context,
     ) -> Self {
-        let pow_fn_type = f64_t.fn_type(&[f64_t.into(), f64_t.into()], false);
-        module.add_function("llvm.pow.f64", pow_fn_type, None);
+        let bin_intrinsic_type = f64_t.fn_type(&[f64_t.into(), f64_t.into()], false);
+        let un_intrinsic_type = f64_t.fn_type(&[f64_t.into()], false);
+        module.add_function("llvm.pow.f64", bin_intrinsic_type, None);
+        module.add_function("llvm.sqrt.f64", un_intrinsic_type, None);
 
         Self {
             f64_t,
@@ -43,33 +45,39 @@ impl<'a> RecursiveBuilder<'a> {
         llvm_jit_exec(self.module);
     }
 
-    pub fn emit_add_func(&self) {
-        let fn_type = self
-            .f64_t
-            .fn_type(&[self.f64_t.into(), self.f64_t.into()], false);
-        let intrinsic = self.module.get_function("llvm.pow.f64").unwrap();
-        let function = self.module.add_function("power", fn_type, None);
+    pub fn emit_main_func(&self, ast: Ast, pool: &ExprPool) {
+        let fn_type = self.f64_t.fn_type(&[], false);
+        let function = self.module.add_function("main", fn_type, None);
         let basic_block = self.context.append_basic_block(function, "entry");
 
         self.builder.position_at_end(basic_block);
 
-        let x = function.get_nth_param(0).unwrap().into_float_value();
-        let y = function.get_nth_param(1).unwrap().into_float_value();
+        let Ast::Expression(ast) = ast else {
+            unreachable!()
+        };
+        let sum = self.build(ast, pool).unwrap();
 
-        // let sum = self.builder.build_float_add(x, y, "sum").unwrap();
-        let sum = self
+        self.builder.build_return(Some(&sum)).unwrap();
+
+        self.module.verify().unwrap();
+    }
+
+    // Calls an intrinsic that takes two args
+    fn emit_intrinsic_call<'b, 'c: 'b>(
+        &'b self,
+        args: &[BasicMetadataValueEnum<'c>],
+        name: &'static str,
+    ) -> Result<FloatValue, BuilderError> {
+        let intrinsic = self.module.get_function(name).unwrap();
+        let res = self
             .builder
-            .build_direct_call(intrinsic, &[x.into(), y.into()], "ret")
-            .unwrap()
+            .build_direct_call(intrinsic, args, "ret")?
             .try_as_basic_value()
             .left()
             .unwrap()
             .into_float_value();
 
-        self.builder.build_return(Some(&sum)).unwrap();
-
-        self.module.verify().unwrap();
-        self.module.print_to_stderr();
+        Ok(res)
     }
 
     pub fn build(
@@ -86,8 +94,14 @@ impl<'a> RecursiveBuilder<'a> {
                 let child = self.build(*rhs, pool)?;
 
                 match op {
-                    Operator::PiTimes => todo!(),
-                    Operator::Sqrt => todo!(),
+                    Operator::PiTimes => self.builder.build_float_mul(
+                        self.f64_t.const_float(std::f64::consts::PI),
+                        child,
+                        "ret",
+                    ),
+                    Operator::Sqrt => {
+                        self.emit_intrinsic_call(&[child.into()], "llvm.sqrt.f64")
+                    }
                     Operator::Minus => self.builder.build_float_neg(child, "negation"),
                     Operator::Not => todo!(),
 
@@ -101,31 +115,41 @@ impl<'a> RecursiveBuilder<'a> {
                 let rhs = self.build(*rhs, pool)?;
 
                 match op {
-                    Operator::Power => {
-                        let res = self
-                            .builder
-                            .build_direct_call(
-                                self.module.get_function("llvm.pow.f64").unwrap(),
-                                &[lhs.into(), rhs.into()],
-                                "ret",
-                            )?
-                            .try_as_basic_value()
-                            .left()
-                            .unwrap()
-                            .into_float_value();
+                    Operator::Power => self
+                        .emit_intrinsic_call(&[lhs.into(), rhs.into()], "llvm.pow.f64"),
+                    Operator::Plus => self.builder.build_float_add(lhs, rhs, "ret"),
+                    Operator::Minus => self.builder.build_float_sub(lhs, rhs, "ret"),
+                    Operator::Times => self.builder.build_float_mul(lhs, rhs, "ret"),
+                    Operator::Slash => self.builder.build_float_div(lhs, rhs, "ret"),
+                    Operator::DoubleEqual
+                    | Operator::Greater
+                    | Operator::GreaterEqual
+                    | Operator::Lesser
+                    | Operator::LesserEqual
+                    | Operator::NotEqual => {
+                        // TODO: implement tolerant comparision in llvm ir
+                        let cmp_var = match op {
+                            Operator::DoubleEqual => FloatPredicate::OEQ,
+                            Operator::Greater => FloatPredicate::OGT,
+                            Operator::GreaterEqual => FloatPredicate::OGE,
+                            Operator::Lesser => FloatPredicate::OLT,
+                            Operator::LesserEqual => FloatPredicate::OLE,
+                            Operator::NotEqual => FloatPredicate::ONE,
 
-                        Ok(res)
+                            _ => unreachable!(),
+                        };
+
+                        let ret_i = self
+                            .builder
+                            .build_float_compare(cmp_var, lhs, rhs, "ret")?
+                            .as_basic_value_enum()
+                            .into_int_value();
+
+                        let ret = self
+                            .builder
+                            .build_signed_int_to_float(ret_i, self.f64_t, "ret")?;
+                        Ok(ret)
                     }
-                    Operator::Plus => todo!(),
-                    Operator::Minus => todo!(),
-                    Operator::Times => todo!(),
-                    Operator::Slash => todo!(),
-                    Operator::DoubleEqual => todo!(),
-                    Operator::Greater => todo!(),
-                    Operator::GreaterEqual => todo!(),
-                    Operator::Lesser => todo!(),
-                    Operator::LesserEqual => todo!(),
-                    Operator::NotEqual => todo!(),
                     Operator::DoublePipe => todo!(),
                     Operator::DoubleAnd => todo!(),
 
@@ -152,7 +176,8 @@ pub fn compile(_ast: Ast, _pool: ExprPool) {
     let builder = context.create_builder();
 
     let codegen = RecursiveBuilder::new(f64_ty, module, &builder, &context);
-    codegen.emit_add_func();
+    let (ast, pool) = lex("√100").and_then(parse).unwrap();
+    codegen.emit_main_func(ast[0].clone(), &pool);
     codegen.exec();
 }
 
@@ -161,10 +186,12 @@ fn llvm_jit_exec(module: Module) {
         .create_jit_execution_engine(OptimizationLevel::None)
         .unwrap();
 
+    module.print_to_stderr();
+
     unsafe {
         type FloaPow = unsafe extern "C" fn() -> f64;
 
-        let add: JitFunction<FloaPow> = exec_engine.get_function("power").unwrap();
+        let add: JitFunction<FloaPow> = exec_engine.get_function("main").unwrap();
         println!("{}", add.call());
     }
 }
