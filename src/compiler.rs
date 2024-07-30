@@ -3,9 +3,9 @@ use inkwell::{
     context::Context,
     execution_engine::JitFunction,
     module::Module,
-    types::FloatType,
+    types::{BasicTypeEnum, FloatType},
     values::{BasicMetadataValueEnum, BasicValue, FloatValue},
-    FloatPredicate, OptimizationLevel,
+    AddressSpace, FloatPredicate, OptimizationLevel,
 };
 
 use crate::{
@@ -32,6 +32,23 @@ impl<'a> RecursiveBuilder<'a> {
         let un_intrinsic_type = f64_t.fn_type(&[f64_t.into()], false);
         module.add_function("llvm.pow.f64", bin_intrinsic_type, None);
         module.add_function("llvm.sqrt.f64", un_intrinsic_type, None);
+
+        let i8_ptr_type = context.ptr_type(AddressSpace::from(0));
+        let i32_type = context.i32_type();
+
+        let struct_type = context.struct_type(
+            &[
+                BasicTypeEnum::PointerType(i8_ptr_type), // data pointer
+                BasicTypeEnum::IntType(i32_type),        // length
+                BasicTypeEnum::IntType(i32_type),        // capacity
+            ],
+            false,
+        );
+
+        let struct_type_name = "ResizableArray";
+
+        // TODO: add function for pushing to and cloning `ResizableArray`s
+        module.add_global(struct_type, None, struct_type_name);
 
         Self {
             f64_t,
