@@ -58,6 +58,7 @@ impl<'a> RecursiveBuilder<'a> {
         let un_intrinsic_type = f64_t.fn_type(&[f64_t.into()], false);
         module.add_function("llvm.pow.f64", bin_intrinsic_type, None);
         module.add_function("llvm.sqrt.f64", un_intrinsic_type, None);
+        module.add_function("llvm.fabs.f64", un_intrinsic_type, None);
 
         let i8_ptr_type = context.ptr_type(AddressSpace::from(0));
         let i32_type = context.i32_type();
@@ -156,6 +157,7 @@ impl<'a> RecursiveBuilder<'a> {
                     Operator::Sqrt => {
                         self.emit_intrinsic_call(&[child.into()], "llvm.sqrt.f64")
                     }
+                    Operator::Abs => self.emit_intrinsic_call(&[child.into()], "llvm.fabs.f64"),
                     Operator::Minus => self.builder.build_float_neg(child, "negation"),
                     Operator::Not => todo!(),
 
@@ -236,7 +238,7 @@ impl<'a> RecursiveBuilder<'a> {
 }
 
 pub fn compile(_ast: Ast, _pool: ExprPool) {
-    let (ast, pool) = lex("print(3 ^ 3, 1)").and_then(parse).unwrap();
+    let (ast, pool) = lex("|-1|").and_then(parse).unwrap();
     let context = Context::create();
     let codegen = RecursiveBuilder::new(&context, pool);
     codegen.emit_main_func(ast[0].clone());
