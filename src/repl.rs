@@ -5,9 +5,8 @@ use std::{
 };
 
 use rustyline::{
-    error::ReadlineError, highlight::Highlighter,
-    validate::MatchingBracketValidator, Completer, Config, Editor, Helper,
-    Hinter, Validator,
+    error::ReadlineError, highlight::Highlighter, validate::MatchingBracketValidator,
+    Completer, Config, Editor, Helper, Hinter, Validator,
 };
 use syntect::{
     easy::HighlightLines,
@@ -62,10 +61,7 @@ impl Highlighter for MyHelper {
                 let _ = write!(
                     acc,
                     "\x1b[38;2;{};{};{}m{}\x1b[0m",
-                    style.foreground.r,
-                    style.foreground.g,
-                    style.foreground.b,
-                    text
+                    style.foreground.r, style.foreground.g, style.foreground.b, text
                 );
 
                 acc
@@ -110,8 +106,7 @@ pub fn repl() -> Result<()> {
             Ok(line) => {
                 let stdout = stdout().lock();
 
-                let ast = lex(&line)
-                    .and_then(|tks| parse_with_pool(tks, &mut pool))?;
+                let ast = lex(&line).and_then(|tks| parse_with_pool(tks, &mut pool))?;
                 let mut ctx = IntrpCtx {
                     writer: stdout,
                     state: &mut state,

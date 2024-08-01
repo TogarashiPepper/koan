@@ -36,11 +36,7 @@ impl StateSim {
 }
 
 /// Performs type inference on the provided Ast
-pub fn infer(
-    ast: &Ast,
-    pool: &ExprPool,
-    state_sim: &mut StateSim,
-) -> Result<ValTy> {
+pub fn infer(ast: &Ast, pool: &ExprPool, state_sim: &mut StateSim) -> Result<ValTy> {
     match ast {
         Ast::Expression(e) => infer_exp(*e, pool, state_sim),
         Ast::Statement(_) => Ok(ValTy::Nothing),
@@ -91,11 +87,7 @@ pub fn annotate(ast: Ast, pool: &ExprPool) -> Result<Ast> {
     annotate_inner(ast, pool, &mut state_sim)
 }
 
-fn annotate_inner(
-    ast: Ast,
-    pool: &ExprPool,
-    sim: &mut StateSim,
-) -> Result<Ast> {
+fn annotate_inner(ast: Ast, pool: &ExprPool, sim: &mut StateSim) -> Result<Ast> {
     match ast {
         Ast::Expression(_) | Ast::Statement(_) => Ok(ast),
         b @ Ast::Block(_) => {
@@ -152,12 +144,9 @@ pub fn infer_exp(
                     (Number, Number) => Number,
 
                     (l, r) => {
-                        return Err(InterpError::MismatchedTypes(
-                            Operator::Power,
-                            l,
-                            r,
+                        return Err(
+                            InterpError::MismatchedTypes(Operator::Power, l, r).into()
                         )
-                        .into())
                     }
                 },
                 Operator::Plus => match (lhs, rhs) {
@@ -166,12 +155,9 @@ pub fn infer_exp(
                     (String, String) => String,
 
                     (l, r) => {
-                        return Err(InterpError::MismatchedTypes(
-                            Operator::Plus,
-                            l,
-                            r,
+                        return Err(
+                            InterpError::MismatchedTypes(Operator::Plus, l, r).into()
                         )
-                        .into())
                     }
                 },
                 Operator::Minus => match (lhs, rhs) {
@@ -179,12 +165,9 @@ pub fn infer_exp(
                     (Number, Array) | (Array, Number) | (Array, Array) => Array,
 
                     (l, r) => {
-                        return Err(InterpError::MismatchedTypes(
-                            Operator::Minus,
-                            l,
-                            r,
+                        return Err(
+                            InterpError::MismatchedTypes(Operator::Minus, l, r).into()
                         )
-                        .into())
                     }
                 },
                 Operator::Times => match (lhs, rhs) {
@@ -193,12 +176,9 @@ pub fn infer_exp(
                     (Number, Number) => Number,
 
                     (l, r) => {
-                        return Err(InterpError::MismatchedTypes(
-                            Operator::Times,
-                            l,
-                            r,
+                        return Err(
+                            InterpError::MismatchedTypes(Operator::Times, l, r).into()
                         )
-                        .into())
                     }
                 },
                 Operator::Slash
@@ -220,21 +200,15 @@ pub fn infer_exp(
                 Number => Number,
                 Array => Array,
 
-                r => {
-                    return Err(InterpError::MismatchedUnOp(
-                        Operator::PiTimes,
-                        r,
-                    )
-                    .into())
-                }
+                r => return Err(InterpError::MismatchedUnOp(Operator::PiTimes, r).into()),
             }
         }
         Expr::NumLit(_) => Number,
         Expr::StrLit(_) => String,
         Expr::Array(_) => Array,
-        Expr::Ident(name) => state_sim.get(name).ok_or_else(|| {
-            KoanError::from(InterpError::UndefVar(name.to_owned()))
-        })?,
+        Expr::Ident(name) => state_sim
+            .get(name)
+            .ok_or_else(|| KoanError::from(InterpError::UndefVar(name.to_owned())))?,
         Expr::FunCall(_, _) => todo!(),
         Expr::IfElse {
             cond,

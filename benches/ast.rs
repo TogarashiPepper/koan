@@ -1,6 +1,4 @@
-use criterion::{
-    black_box, criterion_group, criterion_main, BatchSize, Criterion,
-};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use koan::{interpreter::IntrpCtx, lexer::lex, parser::parse, state::State};
 
 fn criterion_benchmark(c: &mut Criterion) {

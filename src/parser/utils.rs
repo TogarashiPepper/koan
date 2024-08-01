@@ -67,9 +67,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
                     let _ = self.expect(sep)?;
                 }
-                None => {
-                    return Err(ParseError::ExpectedFoundEof(delim.1).into())
-                }
+                None => return Err(ParseError::ExpectedFoundEof(delim.1).into()),
             }
         }
 

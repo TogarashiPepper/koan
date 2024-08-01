@@ -1,7 +1,13 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    error::{InterpError, Result}, inferance::annotate, lexer::Operator, parser::Ast, pool::{Expr, ExprPool, ExprRef}, state::{Function, State}, value::Value
+    error::{InterpError, Result},
+    inferance::annotate,
+    lexer::Operator,
+    parser::Ast,
+    pool::{Expr, ExprPool, ExprRef},
+    state::{Function, State},
+    value::Value,
 };
 
 use core::f64;
@@ -68,10 +74,9 @@ impl<W: Write> IntrpCtx<'_, W> {
                     };
 
                     match (lhs, rhs) {
-                        (l @ Value::Array(_), Value::Array(r)) => l
-                            .zip(r, |l, r| {
-                                Ok(Value::Num(op(&l, &r) as u8 as f64))
-                            }),
+                        (l @ Value::Array(_), Value::Array(r)) => {
+                            l.zip(r, |l, r| Ok(Value::Num(op(&l, &r) as u8 as f64)))
+                        }
                         (ls @ Value::Array(_), r @ Value::Num(_)) => {
                             ls.map(|l| Ok(Value::Num(op(&l, &r) as u8 as f64)))
                         }
@@ -85,9 +90,7 @@ impl<W: Write> IntrpCtx<'_, W> {
             },
 
             Expr::PreOp { op, rhs } if op.is_pre_op() => match op {
-                Operator::PiTimes => {
-                    self.eval(*rhs)? * Value::Num(f64::consts::PI)
-                }
+                Operator::PiTimes => self.eval(*rhs)? * Value::Num(f64::consts::PI),
                 Operator::Minus => {
                     let res = self.eval(*rhs)?;
                     -res
@@ -137,9 +140,7 @@ impl<W: Write> IntrpCtx<'_, W> {
                     if params.len() == 1 {
                         match self.eval(params.pop().unwrap())? {
                             n @ Value::Num(_) => n.in_num(name, f64::floor),
-                            a @ Value::Array(_) => {
-                                a.map(|n| n.in_num(name, f64::floor))
-                            }
+                            a @ Value::Array(_) => a.map(|n| n.in_num(name, f64::floor)),
                             t => Err(InterpError::InvalidParamTy(
                                 name.to_owned(),
                                 t.ty_str(),
@@ -169,8 +170,7 @@ impl<W: Write> IntrpCtx<'_, W> {
                     let mut params = params.clone();
 
                     let v =
-                        self.eval(params.pop().unwrap())?.as_num(name)?.floor()
-                            as u64;
+                        self.eval(params.pop().unwrap())?.as_num(name)?.floor() as u64;
 
                     if v > 4096 {
                         return Err(InterpError::RangeTooLarge(v).into());
@@ -207,19 +207,13 @@ impl<W: Write> IntrpCtx<'_, W> {
                         }
 
                         // Replace current scope with the function's scope
-                        std::mem::swap(
-                            &mut self.state.variables,
-                            &mut old_vars,
-                        );
+                        std::mem::swap(&mut self.state.variables, &mut old_vars);
 
                         // TODO: dont do this (x2), maybe some way to share/eval by-ref
                         let res = self.eval_ast(f.body.clone())?;
 
                         // Set the current scope back to the non-function one
-                        std::mem::swap(
-                            &mut self.state.variables,
-                            &mut old_vars,
-                        );
+                        std::mem::swap(&mut self.state.variables, &mut old_vars);
 
                         Ok(res)
                     }
@@ -333,8 +327,7 @@ mod tests {
     use std::{io::stdout, rc::Rc};
 
     use crate::{
-        interpreter::IntrpCtx, lexer::lex, parser::parse, state::State,
-        value::Value,
+        interpreter::IntrpCtx, lexer::lex, parser::parse, state::State, value::Value,
     };
 
     fn assert_interp(input: &'static str, expected: Value) {

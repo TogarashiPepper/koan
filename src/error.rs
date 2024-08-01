@@ -1,7 +1,10 @@
 use std::backtrace::Backtrace;
 use thiserror::Error;
 
-use crate::{lexer::{Operator, TokenType}, value::ValTy};
+use crate::{
+    lexer::{Operator, TokenType},
+    value::ValTy,
+};
 
 pub type Result<T> = std::result::Result<T, KoanError>;
 
@@ -47,9 +50,7 @@ pub enum InterpError {
     /// Fields are: name, received arity, expected arity
     #[error("Function `{0}` got {1} arguments but expected {2}")]
     MismatchedArity(String, usize, usize),
-    #[error(
-        "Binary Operations on arrays must be on two arrays of equal length"
-    )]
+    #[error("Binary Operations on arrays must be on two arrays of equal length")]
     BinOpArrInvalidLength,
     #[error("Cannot shadow or reassign to `π`")]
     AssignmentToPi,
@@ -125,6 +126,8 @@ pub fn handle_err(err: KoanError) -> String {
             format!("value: {e}\nbacktrace: {}", err.1)
         }
         KoanErrorType::CliError(e) => format!("{e}"),
-        KoanErrorType::VmError(e) => format!("{e}, if you're seeing this it's likely a bug in the compiler"),
+        KoanErrorType::VmError(e) => {
+            format!("{e}, if you're seeing this it's likely a bug in the compiler")
+        }
     }
 }

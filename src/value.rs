@@ -45,7 +45,7 @@ impl Value {
         match self {
             Value::Num(_) => ValTy::Number,
             Value::UTF8(_) => ValTy::String,
-            Value::Nothing =>  ValTy::Nothing,
+            Value::Nothing => ValTy::Nothing,
             Value::Array(_) => ValTy::Array,
         }
     }
@@ -53,11 +53,7 @@ impl Value {
     pub fn as_num(&self, fn_name: &str) -> Result<f64> {
         match self {
             Value::Num(n) => Ok(*n),
-            t => Err(InterpError::InvalidParamTy(
-                fn_name.to_owned(),
-                t.ty_str(),
-            )
-            .into()),
+            t => Err(InterpError::InvalidParamTy(fn_name.to_owned(), t.ty_str()).into()),
         }
     }
 
@@ -69,11 +65,7 @@ impl Value {
     {
         match self {
             Value::Num(n) => Ok(Value::Num(f(*n))),
-            t => Err(InterpError::InvalidParamTy(
-                fn_name.to_owned(),
-                t.ty_str(),
-            )
-            .into()),
+            t => Err(InterpError::InvalidParamTy(fn_name.to_owned(), t.ty_str()).into()),
         }
     }
 
@@ -119,30 +111,24 @@ impl Value {
         match self {
             Value::Num(n) => Ok(Value::Num(n.sqrt())),
             a @ Value::Array(_) => a.map(|x| x.sqrt()),
-            invalid => Err(InterpError::MismatchedUnOp(
-                Operator::Sqrt,
-                invalid.ty_str(),
-            )
-            .into()),
+            invalid => {
+                Err(InterpError::MismatchedUnOp(Operator::Sqrt, invalid.ty_str()).into())
+            }
         }
     }
 
     pub fn pow(self, r: Value) -> Result<Self> {
         match (self, r) {
             (Value::Num(ln), Value::Num(rn)) => Ok(Value::Num(ln.powf(rn))),
-            (a @ Value::Array(_), n @ Value::Num(_)) => {
-                a.map(|x| x.pow(n.clone()))
-            }
-            (n @ Value::Num(_), a @ Value::Array(_)) => {
-                a.map(|x| n.clone().pow(x))
-            }
+            (a @ Value::Array(_), n @ Value::Num(_)) => a.map(|x| x.pow(n.clone())),
+            (n @ Value::Num(_), a @ Value::Array(_)) => a.map(|x| n.clone().pow(x)),
             (l @ Value::Array(_), Value::Array(r)) => l.zip(r, Value::pow),
-            (l, r) => Err(InterpError::MismatchedTypes(
-                Operator::Power,
-                l.ty_str(),
-                r.ty_str(),
-            )
-            .into()),
+            (l, r) => {
+                Err(
+                    InterpError::MismatchedTypes(Operator::Power, l.ty_str(), r.ty_str())
+                        .into(),
+                )
+            }
         }
     }
 
@@ -150,11 +136,9 @@ impl Value {
         match self {
             Value::Num(n) => Ok(Value::Num(n.abs())),
             a @ Value::Array(_) => a.map(|x| x.abs()),
-            invalid => Err(InterpError::MismatchedUnOp(
-                Operator::Abs,
-                invalid.ty_str(),
-            )
-            .into()),
+            invalid => {
+                Err(InterpError::MismatchedUnOp(Operator::Abs, invalid.ty_str()).into())
+            }
         }
     }
 }
@@ -265,8 +249,7 @@ impl Mul for Value {
         Ok(match (self, rhs) {
             (Value::Num(l), Value::Num(r)) => Value::Num(l * r),
             (l @ Value::Array(_), Value::Array(r)) => l.zip(r, Value::mul)?,
-            (Value::Num(l), Value::UTF8(r))
-            | (Value::UTF8(r), Value::Num(l)) => {
+            (Value::Num(l), Value::UTF8(r)) | (Value::UTF8(r), Value::Num(l)) => {
                 let l = l.floor().abs() as usize;
 
                 Value::UTF8(r.repeat(l))
@@ -327,11 +310,7 @@ impl Neg for Value {
         match self {
             Value::Num(n) => Ok(Value::Num(-n)),
             a @ Value::Array(_) => a.map(Neg::neg),
-            t => Err(InterpError::MismatchedUnOp(
-                Operator::Minus,
-                t.ty_str(),
-            )
-            .into()),
+            t => Err(InterpError::MismatchedUnOp(Operator::Minus, t.ty_str()).into()),
         }
     }
 }
@@ -347,10 +326,7 @@ impl Not for Value {
                 Value::Num(0.0)
             }),
             a @ Value::Array(_) => a.map(Value::not),
-            v => {
-                Err(InterpError::MismatchedUnOp(Operator::Not, v.ty_str())
-                    .into())
-            }
+            v => Err(InterpError::MismatchedUnOp(Operator::Not, v.ty_str()).into()),
         }
     }
 }

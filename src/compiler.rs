@@ -157,7 +157,9 @@ impl<'a> RecursiveBuilder<'a> {
                     Operator::Sqrt => {
                         self.emit_intrinsic_call(&[child.into()], "llvm.sqrt.f64")
                     }
-                    Operator::Abs => self.emit_intrinsic_call(&[child.into()], "llvm.fabs.f64"),
+                    Operator::Abs => {
+                        self.emit_intrinsic_call(&[child.into()], "llvm.fabs.f64")
+                    }
                     Operator::Minus => self.builder.build_float_neg(child, "negation"),
                     Operator::Not => todo!(),
 
@@ -214,18 +216,16 @@ impl<'a> RecursiveBuilder<'a> {
             }
             Expr::Ident(_) => todo!(),
             Expr::StrLit(_) => todo!(),
-            Expr::FunCall(name, args) => {
-                match name.as_str() {
-                    "print" => {
-                        for arg in args {
-                            self.emit_print(*arg)?;
-                        }
+            Expr::FunCall(name, args) => match name.as_str() {
+                "print" => {
+                    for arg in args {
+                        self.emit_print(*arg)?;
+                    }
 
-                        Ok(self.f64_t.const_zero())
-                    },
-                     
-                    _ => todo!(),
+                    Ok(self.f64_t.const_zero())
                 }
+
+                _ => todo!(),
             },
             Expr::Array(_) => todo!(),
             Expr::IfElse {

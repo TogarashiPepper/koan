@@ -22,7 +22,7 @@ pub enum Expr {
         cond: ExprRef,
         body: Ast,
         else_body: Option<Ast>,
-    }
+    },
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -47,10 +47,9 @@ impl ExprPool {
     pub fn push(&mut self, expr: Expr) -> ExprRef {
         let idx = self.0.len();
         self.0.push(expr);
-        
+
         ExprRef(idx)
     }
-
 }
 
 impl Default for ExprPool {
@@ -58,4 +57,3 @@ impl Default for ExprPool {
         Self::new()
     }
 }
-

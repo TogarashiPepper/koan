@@ -1,12 +1,12 @@
 use std::{io::stdout, path::PathBuf, process::exit};
 
 use koan::{
+    compiler::compile,
     error::{handle_err, CliError, KoanError, Result},
     interpreter::IntrpCtx,
     lexer::lex,
     parser::parse,
     state::State,
-    compiler::compile,
 };
 
 #[cfg(feature = "repl")]

@@ -12,12 +12,9 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                 TokenType::Number => {
                     if self.check(TokenType::Ident) {
                         let ident = self.expect(TokenType::Ident)?;
-                        let lhs = self
-                            .pool
-                            .push(Expr::NumLit(tok.lexeme.parse().unwrap()));
-                        let rhs = self
-                            .pool
-                            .push(Expr::Ident(ident.lexeme.to_owned()));
+                        let lhs =
+                            self.pool.push(Expr::NumLit(tok.lexeme.parse().unwrap()));
+                        let rhs = self.pool.push(Expr::Ident(ident.lexeme.to_owned()));
 
                         self.pool.push(Expr::BinOp {
                             lhs,
@@ -25,14 +22,11 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                             rhs,
                         })
                     } else {
-                        self.pool
-                            .push(Expr::NumLit(tok.lexeme.parse().unwrap()))
+                        self.pool.push(Expr::NumLit(tok.lexeme.parse().unwrap()))
                     }
                 }
 
-                TokenType::String => {
-                    self.pool.push(Expr::StrLit(tok.lexeme.to_owned()))
-                }
+                TokenType::String => self.pool.push(Expr::StrLit(tok.lexeme.to_owned())),
                 TokenType::LParen => {
                     let lhs = self.expr_bp(0)?;
                     let _ = self.expect(TokenType::RParen)?;
@@ -62,11 +56,10 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                     }
                 }
                 TokenType::LBracket => {
-                    let ls = self.list(
-                        (None, TokenType::RBracket),
-                        TokenType::Comma,
-                        |s| s.expr_bp(0),
-                    )?;
+                    let ls =
+                        self.list((None, TokenType::RBracket), TokenType::Comma, |s| {
+                            s.expr_bp(0)
+                        })?;
 
                     self.pool.push(Expr::Array(ls))
                 }
@@ -87,18 +80,9 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                         else_body,
                     })
                 }
-                _ => {
-                    return Err(ParseError::ExpectedLiteral(
-                        "number".to_owned(),
-                    )
-                    .into())
-                }
+                _ => return Err(ParseError::ExpectedLiteral("number".to_owned()).into()),
             },
-            None => {
-                return Err(
-                    ParseError::ExpectedLiteral("number".to_owned()).into()
-                )
-            }
+            None => return Err(ParseError::ExpectedLiteral("number".to_owned()).into()),
         };
 
         while let Some(op) = self.it.peek().map(|x| x.variant) {
@@ -139,12 +123,7 @@ mod tests {
         pool::{Expr, ExprPool, ExprRef},
     };
 
-    fn expr_eq(
-        lhs: ExprRef,
-        rhs: ExprRef,
-        l_pool: &ExprPool,
-        r_pool: &ExprPool,
-    ) -> bool {
+    fn expr_eq(lhs: ExprRef, rhs: ExprRef, l_pool: &ExprPool, r_pool: &ExprPool) -> bool {
         let lhs = l_pool.get(lhs);
         let rhs = r_pool.get(rhs);
 
@@ -165,10 +144,9 @@ mod tests {
                     && expr_eq(*ll, *rl, l_pool, r_pool)
                     && expr_eq(*lr, *rr, l_pool, r_pool)
             }
-            (
-                Expr::PreOp { op: lop, rhs: lr },
-                Expr::PreOp { op: rop, rhs: rr },
-            ) => lop == rop && expr_eq(*lr, *rr, l_pool, r_pool),
+            (Expr::PreOp { op: lop, rhs: lr }, Expr::PreOp { op: rop, rhs: rr }) => {
+                lop == rop && expr_eq(*lr, *rr, l_pool, r_pool)
+            }
             (Expr::Ident(l), Expr::Ident(r)) => l == r,
             (Expr::NumLit(l), Expr::NumLit(r)) => l == r,
             (Expr::StrLit(l), Expr::StrLit(r)) => l == r,

@@ -33,10 +33,7 @@ pub fn parse(tokens: Vec<Token<'_>>) -> Result<(Vec<Ast>, ExprPool)> {
     Ok((res, pool))
 }
 
-pub fn parse_with_pool(
-    tokens: Vec<Token<'_>>,
-    pool: &mut ExprPool,
-) -> Result<Vec<Ast>> {
+pub fn parse_with_pool(tokens: Vec<Token<'_>>, pool: &mut ExprPool) -> Result<Vec<Ast>> {
     let mut it = TokenStream {
         it: tokens.into_iter().peekable(),
         pool,
@@ -62,9 +59,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                 TokenType::Fun => self.fun_def()?,
                 TokenType::RCurly => {
                     if !in_block {
-                        return Err(
-                            ParseError::Unexpected(TokenType::RCurly).into()
-                        );
+                        return Err(ParseError::Unexpected(TokenType::RCurly).into());
                     }
 
                     break;
@@ -95,8 +90,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
     }
 
     pub fn fun_def(&mut self) -> Result<Ast> {
-        let [_, ident] =
-            self.multi_expect(&[TokenType::Fun, TokenType::Ident])?;
+        let [_, ident] = self.multi_expect(&[TokenType::Fun, TokenType::Ident])?;
         // TODO: parse type annotations
         let params = self.list(
             (Some(TokenType::LParen), TokenType::RParen),
@@ -154,8 +148,7 @@ pub fn infix_binding_power(op: Operator) -> (u8, u8) {
         Power => (9, 10),
         Times | Slash => (7, 8),
         Plus | Minus => (5, 6),
-        DoubleEqual | NotEqual | Greater | GreaterEqual | Lesser
-        | LesserEqual => (3, 4),
+        DoubleEqual | NotEqual | Greater | GreaterEqual | Lesser | LesserEqual => (3, 4),
         DoublePipe | DoubleAnd => (1, 2),
         _ => unreachable!(),
     }
@@ -163,10 +156,7 @@ pub fn infix_binding_power(op: Operator) -> (u8, u8) {
 
 pub fn prefix_binding_power(op: Operator) -> ((), u8) {
     match op {
-        Operator::PiTimes
-        | Operator::Minus
-        | Operator::Sqrt
-        | Operator::Not => ((), 11),
+        Operator::PiTimes | Operator::Minus | Operator::Sqrt | Operator::Not => ((), 11),
         _ => panic!("Expected prefix operator, found some other token"),
     }
 }

@@ -135,8 +135,7 @@ impl<'a> TokenBuilder<'a> {
             None | Some(_) => match single_char_token {
                 Some(single_char) => Ok(self.variant(single_char)),
                 None => {
-                    Err(LexError::PartialMultiCharToken(first_char, next_char)
-                        .into())
+                    Err(LexError::PartialMultiCharToken(first_char, next_char).into())
                 }
             },
         }
@@ -152,9 +151,8 @@ impl<'a> TokenBuilder<'a> {
     /// string, if they are not this method will not behave as expected.
     fn second(mut self, len: usize) -> TokenBuilder<'a> {
         let idx = self.idx.unwrap();
-        self.lexeme = Some(
-            &self.input_string[idx..idx + self.lexeme.unwrap().len() + len],
-        );
+        self.lexeme =
+            Some(&self.input_string[idx..idx + self.lexeme.unwrap().len() + len]);
 
         self
     }
@@ -171,7 +169,9 @@ impl<'a> TokenBuilder<'a> {
                 location: idx..idx + lexeme.len(),
                 lexeme,
             },
-            _ => panic!("Attempted to build builder without all of the fields filled out"),
+            _ => {
+                panic!("Attempted to build builder without all of the fields filled out")
+            }
         }
     }
 }
@@ -214,16 +214,10 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
             '}' => builder.variant(RCurly),
             '[' => builder.variant(LBracket),
             ']' => builder.variant(RBracket),
-            '|' => builder.variant_pair(
-                &mut it,
-                ('|', '|'),
-                (Some(Pipe), Op(DoublePipe)),
-            )?,
-            '&' => builder.variant_pair(
-                &mut it,
-                ('&', '&'),
-                (None, Op(DoubleAnd)),
-            )?,
+            '|' => {
+                builder.variant_pair(&mut it, ('|', '|'), (Some(Pipe), Op(DoublePipe)))?
+            }
+            '&' => builder.variant_pair(&mut it, ('&', '&'), (None, Op(DoubleAnd)))?,
             '!' => builder.variant_pair(
                 &mut it,
                 ('!', '='),
@@ -267,10 +261,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
                         "else" => TokenType::Else,
                         other => {
                             if other != "π" && other.contains('π') {
-                                return Err(LexError::InvalidToken(
-                                    "π".to_owned(),
-                                )
-                                .into());
+                                return Err(LexError::InvalidToken("π".to_owned()).into());
                             } else {
                                 TokenType::Ident
                             }

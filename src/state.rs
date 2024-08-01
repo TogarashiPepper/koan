@@ -1,4 +1,7 @@
-use crate::{parser::Ast, value::{ValTy, Value}};
+use crate::{
+    parser::Ast,
+    value::{ValTy, Value},
+};
 use std::{collections::HashMap, f64};
 
 #[derive(Debug, Clone)]
@@ -22,7 +25,7 @@ impl State {
 
         State {
             variables: vec![variables],
-            functions: HashMap::new()
+            functions: HashMap::new(),
         }
     }
 
