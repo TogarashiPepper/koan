@@ -1,13 +1,7 @@
 use inkwell::{
-    builder::{Builder, BuilderError},
-    context::Context,
-    execution_engine::JitFunction,
-    module::Module,
-    types::{BasicTypeEnum, FloatType},
-    values::{
+    builder::{Builder, BuilderError}, context::Context, execution_engine::JitFunction, memory_buffer::MemoryBuffer, module::Module, types::{BasicTypeEnum, FloatType}, values::{
         BasicMetadataValueEnum, BasicValue, FloatValue, FunctionValue, GlobalValue,
-    },
-    AddressSpace, FloatPredicate, OptimizationLevel,
+    }, AddressSpace, FloatPredicate, OptimizationLevel
 };
 
 use crate::{
@@ -76,6 +70,17 @@ impl<'a> RecursiveBuilder<'a> {
 
         // TODO: add function for pushing to and cloning `ResizableArray`s
         module.add_global(struct_type, None, struct_type_name);
+
+        // TODO: Handle error
+        let mut bytes = std::fs::read("./stdlib/stdlib.ll").unwrap();
+
+        // Append null byte for llvm since it expects null terminated strings
+        bytes.push(0);
+
+        let mem_buffer = MemoryBuffer::create_from_memory_range_copy(&bytes, "stdmembuffer");
+        let std_module = context.create_module_from_ir(mem_buffer).unwrap();
+
+        module.link_in_module(std_module).unwrap();
 
         Self {
             f64_t,
