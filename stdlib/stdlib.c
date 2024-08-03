@@ -24,7 +24,7 @@ KoanArray init_array(uint32_t size) {
     return res;
 }
 
-void assert_not_freed(KoanArray* array) {
+static inline void assert_not_freed(KoanArray* array) {
     if (array->ptr == NULL) {
         printf("Tried to operate on a freed array\n");
         exit(1);
