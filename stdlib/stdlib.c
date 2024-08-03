@@ -24,7 +24,16 @@ KoanArray init_array(uint32_t size) {
     return res;
 }
 
+void assert_not_freed(KoanArray* array) {
+    if (array->ptr == NULL) {
+        printf("Tried to operate on a freed array\n");
+        exit(1);
+    }
+}
+
 double nth_array(KoanArray* array, uint32_t index) {
+    assert_not_freed(array);
+
     if (index >= array->len) {
         printf("Index `%u` is out of bounds", index);
     }
@@ -33,6 +42,8 @@ double nth_array(KoanArray* array, uint32_t index) {
 }
 
 void resize_array(KoanArray* array) {
+    assert_not_freed(array);
+
     array->ptr = realloc(array->ptr, 2 * array->cap * sizeof(double));
     if (!array->ptr) { 
         printf("Memory Re-allocation failed."); 
@@ -42,6 +53,8 @@ void resize_array(KoanArray* array) {
 }
 
 void set_array(KoanArray* array, uint32_t nth, double value) {
+    assert_not_freed(array);
+
     if (nth >= array->len) {
         printf("Value `%u` is out of bounds", nth);
         exit(1);
@@ -50,6 +63,8 @@ void set_array(KoanArray* array, uint32_t nth, double value) {
 }
 
 void push_array(KoanArray* array, double value) {
+    assert_not_freed(array);
+
     if (array->len + 1 >= array->cap) {
         resize_array(array);
     }
@@ -60,6 +75,7 @@ void push_array(KoanArray* array, double value) {
 
 void free_array(KoanArray* array) {
     free(array->ptr);
+    array->ptr = NULL;
     array->cap = 0;
     array->len = 0;
 }
@@ -76,4 +92,7 @@ void free_array(KoanArray* array) {
 //     }
 //
 //     free_array(&arr);
+//
+//     // Test that pushing to a freed array doesn't work
+//     push_array(&arr, 0.2);
 // }
