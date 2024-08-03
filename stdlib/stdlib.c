@@ -17,7 +17,7 @@ typedef struct {
 
 KoanArray init_array(uint32_t size) {
     KArrBox box = {
-        .data = calloc(size, sizeof(double)),
+        .data = malloc(size * sizeof(double)),
         .refcount = 1,
         .len = 0,
         .cap = size,
