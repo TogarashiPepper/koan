@@ -173,7 +173,7 @@ impl<'a> RecursiveBuilder<'a> {
                     | Operator::Lesser
                     | Operator::LesserEqual
                     | Operator::NotEqual => {
-                        // TODO: implement tolerant comparision in llvm ir
+                        // TODO: implement tolerant comparison in llvm ir
                         let cmp_var = match op {
                             Operator::DoubleEqual => FloatPredicate::OEQ,
                             Operator::Greater => FloatPredicate::OGT,
