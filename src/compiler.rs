@@ -235,8 +235,8 @@ impl<'a> RecursiveBuilder<'a> {
                 // TODO: run destructor, at end of current block(?)
                 let array_init = self.module.get_function("init_array").unwrap();
                 let array_push = self.module.get_function("push_array").unwrap();
-                let array_print_elems =
-                    self.module.get_function("print_arr_elems").unwrap();
+                // let array_print_elems =
+                    // self.module.get_function("print_array").unwrap();
                 self.builder.build_direct_call(
                     array_init,
                     &[size.into(), arr_ptr.into()],
@@ -254,11 +254,11 @@ impl<'a> RecursiveBuilder<'a> {
                     )?;
                 }
 
-                self.builder.build_direct_call(
-                    array_print_elems,
-                    &[arr_ptr.into()],
-                    "printed_void",
-                )?;
+                // self.builder.build_direct_call(
+                //     array_print_elems,
+                //     &[arr_ptr.into()],
+                //     "printed_void",
+                // )?;
 
                 let _ = self.module.print_to_file("llvmirdebugoutput.llvm");
 
