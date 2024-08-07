@@ -135,6 +135,11 @@ impl<'a> RecursiveBuilder<'a> {
         Ok(res)
     }
 
+    // TODO: split into
+    // `build_float :: whatever -> Result<FloatValue>`
+    // and
+    // `build_array :: whatever -> Result<StructValue>`
+    // Type checker can be used to determine which to call, build method should wrap those 2
     pub fn build(&self, ast: ExprRef) -> Result<FloatValue, BuilderError> {
         let exp_ref = self.pool.get(ast);
 
