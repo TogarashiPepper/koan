@@ -15,7 +15,12 @@ typedef struct {
     bool freed;
 } KoanArray;
 
-KoanArray init_array(uint32_t size) {
+
+// NOTE: We make use of out parameters because LLVM decides that our KoanArray struct would be
+// NOTE: better represented as a [2 x i64], but this array repr of the struct causes an error
+// NOTE: in the Inkwell builder, hopefully this indirection doesn't reduce perf
+// TODO: tell LLVM not to do the aforementioned thing and return by value
+void init_array(uint32_t size, KoanArray* out) {
     KArrBox box = {
         .data = malloc(size * sizeof(double)),
         .refcount = 1,
@@ -37,7 +42,7 @@ KoanArray init_array(uint32_t size) {
         exit(1);
     }
 
-    return res;
+    *out = res;
 }
 
 static inline void assert_not_freed(KoanArray* array) {
@@ -118,7 +123,7 @@ void free_array(KoanArray* array) {
     }
 }
 
-KoanArray copy_array(KoanArray* arr) {
+void copy_array(KoanArray* arr, KoanArray* out) {
     assert_not_freed(arr);
 
     KoanArray copied = {
@@ -128,7 +133,7 @@ KoanArray copy_array(KoanArray* arr) {
 
     arr->ptr->refcount += 1;
 
-    return copied;
+    *out = copied;
 }
 
 void print_array(KoanArray* arr) {

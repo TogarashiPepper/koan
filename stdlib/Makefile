@@ -1,5 +1,5 @@
 buildir:
-	clang stdlib.c -S -emit-llvm -O3
+	clang stdlib.c -S -emit-llvm -O0
 
 buildtest:
 	clang stdtest.c -O3

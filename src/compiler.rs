@@ -1,7 +1,14 @@
 use inkwell::{
-    builder::{Builder, BuilderError}, context::Context, execution_engine::JitFunction, memory_buffer::MemoryBuffer, module::Module, types::{BasicTypeEnum, FloatType}, values::{
+    builder::{Builder, BuilderError},
+    context::Context,
+    execution_engine::JitFunction,
+    memory_buffer::MemoryBuffer,
+    module::Module,
+    types::{BasicTypeEnum, FloatType},
+    values::{
         BasicMetadataValueEnum, BasicValue, FloatValue, FunctionValue, GlobalValue,
-    }, AddressSpace, FloatPredicate, OptimizationLevel
+    },
+    AddressSpace, FloatPredicate, OptimizationLevel,
 };
 
 use crate::{
@@ -60,7 +67,8 @@ impl<'a> RecursiveBuilder<'a> {
         // Append null byte for llvm since it expects null terminated strings
         bytes.push(0);
 
-        let mem_buffer = MemoryBuffer::create_from_memory_range_copy(&bytes, "stdmembuffer");
+        let mem_buffer =
+            MemoryBuffer::create_from_memory_range_copy(&bytes, "stdmembuffer");
         let std_module = context.create_module_from_ir(mem_buffer).unwrap();
 
         module.link_in_module(std_module).unwrap();
@@ -215,7 +223,47 @@ impl<'a> RecursiveBuilder<'a> {
 
                 _ => todo!(),
             },
-            Expr::Array(_) => todo!(),
+            Expr::Array(exprs) => {
+                // TODO: figure out what sign_extend does and also document that 32bit targets are
+                // unsupported
+                let size = self.context.i32_type().const_int(exprs.len() as u64, false);
+                let karray_ty = self.module.get_struct_type("struct.KoanArray").unwrap();
+
+                let arr_ptr = self.builder.build_alloca(karray_ty, "karrayptr")?;
+
+                // TODO: proper error handling, maybe util method?
+                // TODO: run destructor, at end of current block(?)
+                let array_init = self.module.get_function("init_array").unwrap();
+                let array_push = self.module.get_function("push_array").unwrap();
+                let array_print_elems =
+                    self.module.get_function("print_arr_elems").unwrap();
+                self.builder.build_direct_call(
+                    array_init,
+                    &[size.into(), arr_ptr.into()],
+                    "koanarray",
+                )?;
+
+                for expr in exprs {
+                    // TODO: make a float-only self.build or introduce type check
+                    let child = self.build(*expr)?;
+
+                    self.builder.build_direct_call(
+                        array_push,
+                        &[arr_ptr.into(), child.into()],
+                        "pushed_void",
+                    )?;
+                }
+
+                self.builder.build_direct_call(
+                    array_print_elems,
+                    &[arr_ptr.into()],
+                    "printed_void",
+                )?;
+
+                let _ = self.module.print_to_file("llvmirdebugoutput.llvm");
+
+                todo!()
+            }
             Expr::IfElse {
                 cond,
                 body,
@@ -226,7 +274,7 @@ impl<'a> RecursiveBuilder<'a> {
 }
 
 pub fn compile(_ast: Ast, _pool: ExprPool) {
-    let (ast, pool) = lex("|-1|").and_then(parse).unwrap();
+    let (ast, pool) = lex("[1, 2, 3]").and_then(parse).unwrap();
     let context = Context::create();
     let codegen = RecursiveBuilder::new(&context, pool);
     codegen.emit_main_func(ast[0].clone());

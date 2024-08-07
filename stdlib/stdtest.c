@@ -1,7 +1,9 @@
 #include "./stdlib.c"
 
 int main() {
-    KoanArray arr = init_array(2);
+	KoanArray arr;
+    init_array(2, &arr);
+
     push_array(&arr, 1);
     push_array(&arr, 2);
     push_array(&arr, 3);
