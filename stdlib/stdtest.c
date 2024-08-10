@@ -8,7 +8,9 @@ int main() {
     push_array(&arr, 2);
     push_array(&arr, 3);
 
-    KoanArray copied = copy_array(&arr);
+	KoanArray copied;
+
+	copy_array(&arr, &copied);
 
     print_array(&arr);
     print_arr_elems(&arr);

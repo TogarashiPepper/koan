@@ -15,6 +15,14 @@ typedef struct {
     bool freed;
 } KoanArray;
 
+typedef double (mapUnary)(double);
+
+static inline void assert_not_freed(KoanArray* array) {
+    if (array->ptr == NULL || array->ptr->data == NULL || array->freed) {
+        printf("Tried to operate on a freed array\n");
+        exit(1);
+    }
+}
 
 // NOTE: We make use of out parameters because LLVM decides that our KoanArray struct would be
 // NOTE: better represented as a [2 x i64], but this array repr of the struct causes an error
@@ -43,13 +51,6 @@ void init_array(uint32_t size, KoanArray* out) {
     }
 
     *out = res;
-}
-
-static inline void assert_not_freed(KoanArray* array) {
-    if (array->ptr == NULL || array->ptr->data == NULL || array->freed) {
-        printf("Tried to operate on a freed array\n");
-        exit(1);
-    }
 }
 
 uint32_t len_array(KoanArray* array) {
@@ -99,7 +100,7 @@ void set_array(KoanArray* array, uint32_t nth, double value) {
 void push_array(KoanArray* array, double value) {
     assert_not_freed(array);
 
-    if (len_array(array) + 1 >= cap_array(array)) {
+    if (len_array(array) + 1 > cap_array(array)) {
         resize_array(array);
     }
     array->ptr->len += 1;
@@ -134,6 +135,10 @@ void copy_array(KoanArray* arr, KoanArray* out) {
     arr->ptr->refcount += 1;
 
     *out = copied;
+}
+
+void map_array(mapUnary* func, double value, KoanArray* array, KoanArray* out) {
+	exit(255);
 }
 
 void print_array(KoanArray* arr) {

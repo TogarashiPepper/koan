@@ -1,10 +1,12 @@
+mod llvalue;
+
 use inkwell::{
     builder::{Builder, BuilderError},
     context::Context,
     execution_engine::JitFunction,
     memory_buffer::MemoryBuffer,
     module::Module,
-    types::{BasicTypeEnum, FloatType},
+    types::FloatType,
     values::{
         BasicMetadataValueEnum, BasicValue, FloatValue, FunctionValue, GlobalValue,
     },
@@ -16,6 +18,8 @@ use crate::{
     parser::{parse, Ast},
     pool::{Expr, ExprPool, ExprRef},
 };
+
+use llvalue::LLValue;
 
 fn create_printf<'a>(
     context: &'a Context,
@@ -135,12 +139,76 @@ impl<'a> RecursiveBuilder<'a> {
         Ok(res)
     }
 
+    fn add<'s>(
+        &'s self,
+        lhs: LLValue<'s>,
+        rhs: LLValue<'s>,
+    ) -> Result<LLValue<'s>, BuilderError> {
+        match (lhs, rhs) {
+            (LLValue::Float(l), LLValue::Float(r)) => self
+                .builder
+                .build_float_add(l, r, "fadd")
+                .map(LLValue::Float),
+            (LLValue::Float(_), LLValue::Array(_)) => todo!(),
+            (LLValue::Array(_), LLValue::Float(_)) => todo!(),
+            (LLValue::Array(_), LLValue::Array(_)) => todo!(),
+        }
+    }
+
+    fn sub<'s>(
+        &'s self,
+        lhs: LLValue<'s>,
+        rhs: LLValue<'s>,
+    ) -> Result<LLValue<'s>, BuilderError> {
+        match (lhs, rhs) {
+            (LLValue::Float(lhs), LLValue::Float(rhs)) => self
+                .builder
+                .build_float_sub(lhs, rhs, "fsub")
+                .map(LLValue::Float),
+            (LLValue::Float(_), LLValue::Array(_)) => todo!(),
+            (LLValue::Array(_), LLValue::Float(_)) => todo!(),
+            (LLValue::Array(_), LLValue::Array(_)) => todo!(),
+        }
+    }
+
+    fn div<'s>(
+        &'s self,
+        lhs: LLValue<'s>,
+        rhs: LLValue<'s>,
+    ) -> Result<LLValue, BuilderError> {
+        match (lhs, rhs) {
+            (LLValue::Float(lhs), LLValue::Float(rhs)) => self
+                .builder
+                .build_float_div(lhs, rhs, "fdiv")
+                .map(LLValue::Float),
+            (LLValue::Float(_), LLValue::Array(_)) => todo!(),
+            (LLValue::Array(_), LLValue::Float(_)) => todo!(),
+            (LLValue::Array(_), LLValue::Array(_)) => todo!(),
+        }
+    }
+
+    fn mul<'s>(
+        &'s self,
+        lhs: LLValue<'s>,
+        rhs: LLValue<'s>,
+    ) -> Result<LLValue, BuilderError> {
+        match (lhs, rhs) {
+            (LLValue::Float(lhs), LLValue::Float(rhs)) => self
+                .builder
+                .build_float_mul(lhs, rhs, "fmul")
+                .map(LLValue::Float),
+            (LLValue::Float(_), LLValue::Array(_)) => todo!(),
+            (LLValue::Array(_), LLValue::Float(_)) => todo!(),
+            (LLValue::Array(_), LLValue::Array(_)) => todo!(),
+        }
+    }
+
     // TODO: split into
     // `build_float :: whatever -> Result<FloatValue>`
     // and
     // `build_array :: whatever -> Result<StructValue>`
     // Type checker can be used to determine which to call, build method should wrap those 2
-    pub fn build(&self, ast: ExprRef) -> Result<FloatValue, BuilderError> {
+    pub fn build(&self, ast: ExprRef) -> Result<LLValue, BuilderError> {
         let exp_ref = self.pool.get(ast);
 
         match exp_ref {
@@ -176,10 +244,10 @@ impl<'a> RecursiveBuilder<'a> {
                 match op {
                     Operator::Power => self
                         .emit_intrinsic_call(&[lhs.into(), rhs.into()], "llvm.pow.f64"),
-                    Operator::Plus => self.builder.build_float_add(lhs, rhs, "ret"),
-                    Operator::Minus => self.builder.build_float_sub(lhs, rhs, "ret"),
-                    Operator::Times => self.builder.build_float_mul(lhs, rhs, "ret"),
-                    Operator::Slash => self.builder.build_float_div(lhs, rhs, "ret"),
+                    Operator::Plus => self.add(lhs, rhs),
+                    Operator::Minus => self.sub(lhs, rhs),
+                    Operator::Times => self.mul(lhs, rhs), 
+                    Operator::Slash => self.div(lhs, rhs),
                     Operator::DoubleEqual
                     | Operator::Greater
                     | Operator::GreaterEqual
@@ -204,10 +272,10 @@ impl<'a> RecursiveBuilder<'a> {
                             .as_basic_value_enum()
                             .into_int_value();
 
-                        let ret = self
+                        self
                             .builder
-                            .build_signed_int_to_float(ret_i, self.f64_t, "ret")?;
-                        Ok(ret)
+                            .build_signed_int_to_float(ret_i, self.f64_t, "ret")
+                            .map(LLValue::Float)
                     }
                     Operator::DoublePipe => todo!(),
                     Operator::DoubleAnd => todo!(),
@@ -239,14 +307,14 @@ impl<'a> RecursiveBuilder<'a> {
                 // TODO: proper error handling, maybe util method?
                 // TODO: run destructor, at end of current block(?)
                 let array_init = self.module.get_function("init_array").unwrap();
-                let array_push = self.module.get_function("push_array").unwrap();
-                // let array_print_elems =
-                    // self.module.get_function("print_array").unwrap();
+
                 self.builder.build_direct_call(
                     array_init,
                     &[size.into(), arr_ptr.into()],
                     "koanarray",
                 )?;
+
+                let array_push = self.module.get_function("push_array").unwrap();
 
                 for expr in exprs {
                     // TODO: make a float-only self.build or introduce type check
@@ -259,15 +327,26 @@ impl<'a> RecursiveBuilder<'a> {
                     )?;
                 }
 
+                // let array_print_details =
+                //     self.module.get_function("print_array").unwrap();
+                // let array_print_elems =
+                //     self.module.get_function("print_arr_elems").unwrap();
+                //
                 // self.builder.build_direct_call(
                 //     array_print_elems,
+                //     &[arr_ptr.into()],
+                //     "printed_void",
+                // )?;
+                //
+                // self.builder.build_direct_call(
+                //     array_print_details,
                 //     &[arr_ptr.into()],
                 //     "printed_void",
                 // )?;
 
                 let _ = self.module.print_to_file("llvmirdebugoutput.llvm");
 
-                todo!()
+                Ok(self.f64_t.const_zero())
             }
             Expr::IfElse {
                 cond,
@@ -279,7 +358,7 @@ impl<'a> RecursiveBuilder<'a> {
 }
 
 pub fn compile(_ast: Ast, _pool: ExprPool) {
-    let (ast, pool) = lex("[1, 2, 3]").and_then(parse).unwrap();
+    let (ast, pool) = lex("[1, 2, 3, 4, 5]").and_then(parse).unwrap();
     let context = Context::create();
     let codegen = RecursiveBuilder::new(&context, pool);
     codegen.emit_main_func(ast[0].clone());
@@ -290,8 +369,6 @@ fn llvm_jit_exec(module: Module) {
     let exec_engine = module
         .create_jit_execution_engine(OptimizationLevel::None)
         .unwrap();
-
-    module.print_to_stderr();
 
     unsafe {
         type FloaPow = unsafe extern "C" fn() -> f64;
