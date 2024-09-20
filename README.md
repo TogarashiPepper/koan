@@ -1,6 +1,18 @@
 # The Koan Language
 This is a simple programming language I'll be working on. The goal is to have fun language features that aren't very common (e.g. apl-esque single character function names)
 
+# Installation
+## Build from scratch
+Clone the repo and run `cargo build --release` (will need a rust toolchain installed). Simple as! (the final binary will be `target/release/koan`)
+
+```bash
+git clone https://github.com/TogarashiPepper/koan.git
+cd koan
+cargo build --release
+```
+## Install a pre-compiled binary
+Navigate to the github releases page and download the appropriate release. In the future a version manager will be provided to make this process a little bit easier and facililate testing beta versions.
+
 ## Standard library
 ### Range
 The `range` function takes an integer `n` (if it is a float, it will be floored) and returns an array of 0 to `n - 1`.
@@ -46,7 +58,7 @@ All of the above operators are binary, but there are also four unary operators. 
 The absolute value of a number (or an array of them) may be obtained by surrounding it in `|`s, so `|-1|` is `1`
 
 ### Implicit multiplication
-Multiplication may be done implicitly without the use of the `*` (or `×`) if it takes the form of `<literal><ident>` so `2π` is `2 * π` but `π2` is the identifier `π2`. In future versions user-defined variables with names such as `π2` will be disallowed, in hopes of more insightful error messages regarding implicit multiplication.
+Multiplication may be done implicitly without the use of the `*` (or `×`) if it takes the form of `<literal><ident>` so `2x` is `2 * x` but `x2` is the identifier `x2`. In future versions user-defined variables with names such as `x2` will be disallowed, in hopes of more insightful error messages regarding implicit multiplication.
 
 ### Unicode
 For the most part, every ascii operator has a unicode equivalent, `>=` may be written as `≥`, `*` as `×` (note this is not ascii x), `<=` as `≤`, and `!=` as `≠`.
