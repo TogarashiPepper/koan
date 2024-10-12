@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -15,13 +16,33 @@ typedef struct {
     bool freed;
 } KoanArray;
 
-typedef double (mapUnary)(double);
+typedef double (mapper)(double, double);
 
 static inline void assert_not_freed(KoanArray* array) {
     if (array->ptr == NULL || array->ptr->data == NULL || array->freed) {
-        printf("Tried to operate on a freed array\n");
+        printf("Tried to operate on a freed or uninit array\n");
         exit(1);
     }
+}
+
+double std_plus(double a, double b) {
+	return a + b;
+}
+
+double std_minus(double a, double b) {
+	return a - b;
+}
+
+double std_times(double a, double b) {
+	return a * b;
+}
+
+double std_div(double a, double b) {
+	return a / b;
+}
+
+double std_pow(double a, double b) {
+	return pow(a, b);
 }
 
 // NOTE: We make use of out parameters because LLVM decides that our KoanArray struct would be
@@ -137,8 +158,15 @@ void copy_array(KoanArray* arr, KoanArray* out) {
     *out = copied;
 }
 
-void map_array(mapUnary* func, double value, KoanArray* array, KoanArray* out) {
-	exit(255);
+// NOTE: out parameter should be uninitialized as `map_array` calls init_array
+void map_array(mapper* func, double constant, KoanArray* array, KoanArray* out) {
+	init_array(len_array(array), out);
+
+	for (uint32_t i = 0; i < len_array(array); i++) {
+		double value = nth_array(array, i);
+
+		push_array(out, func(value, constant));
+	}
 }
 
 void print_array(KoanArray* arr) {
@@ -159,7 +187,7 @@ void print_arr_elems(KoanArray* arr) {
 
     printf("[");
 
-    for (uint32_t i = 0; i < len_array(arr); ++i) {
+    for (uint32_t i = 0; i < len_array(arr); i++) {
         double val = nth_array(arr, i);
 
         printf("%f, ", val);

@@ -92,10 +92,13 @@ impl<'a> RecursiveBuilder<'a> {
     }
 
     fn emit_print<'c, 'b: 'c>(&'b self, value: ExprRef) -> Result<(), BuilderError> {
-        let value = self.build(value)?;
+        let value = match self.build(value)? {
+            LLValue::Float(v) => v.into(),
+            LLValue::Array(v) => v.into(),
+        };
 
         let args: &[BasicMetadataValueEnum<'c>] =
-            &[self.printf.1.as_pointer_value().into(), value.into()];
+            &[self.printf.1.as_pointer_value().into(), value];
 
         self.builder
             .build_call(self.printf.0, args, "write_call")
@@ -116,13 +119,16 @@ impl<'a> RecursiveBuilder<'a> {
         };
         let sum = self.build(ast).unwrap();
 
-        self.builder.build_return(Some(&sum)).unwrap();
+        match sum {
+            LLValue::Float(r) => self.builder.build_return(Some(&r)).unwrap(),
+            LLValue::Array(r) => self.builder.build_return(Some(&r)).unwrap(),
+        };
 
         self.module.verify().unwrap();
     }
 
     // Calls an intrinsic that takes two args
-    fn emit_intrinsic_call<'b, 'c: 'b>(
+    fn emit_call<'b, 'c: 'b>(
         &'b self,
         args: &[BasicMetadataValueEnum<'c>],
         name: &'static str,
@@ -203,6 +209,21 @@ impl<'a> RecursiveBuilder<'a> {
         }
     }
 
+    fn pow<'s>(
+        &'s self,
+        lhs: LLValue<'s>,
+        rhs: LLValue<'s>,
+    ) -> Result<LLValue<'s>, BuilderError> {
+        match (lhs, rhs) {
+            (LLValue::Float(l), LLValue::Float(r)) => self
+                .emit_call(&[l.into(), r.into()], "std_pow")
+                .map(LLValue::Float),
+            (LLValue::Float(_), LLValue::Array(_)) => todo!(),
+            (LLValue::Array(_), LLValue::Float(_)) => todo!(),
+            (LLValue::Array(_), LLValue::Array(_)) => todo!(),
+        }
+    }
+
     // TODO: split into
     // `build_float :: whatever -> Result<FloatValue>`
     // and
@@ -212,28 +233,33 @@ impl<'a> RecursiveBuilder<'a> {
         let exp_ref = self.pool.get(ast);
 
         match exp_ref {
-            Expr::NumLit(n) => Ok(self.f64_t.const_float(*n)),
+            Expr::NumLit(n) => Ok(LLValue::Float(self.f64_t.const_float(*n))),
             Expr::PreOp { op, rhs } => {
-                let op = *op;
-                let child = self.build(*rhs)?;
+                // let op = *op;
+                // let child = self.build(*rhs)?;
+                //
+                // match op {
+                //     Operator::PiTimes => self
+                //         .builder
+                //         .build_float_mul(
+                //             self.f64_t.const_float(std::f64::consts::PI),
+                //             child,
+                //             "ret",
+                //         )
+                //         .map(LLValue::Float),
+                //     Operator::Sqrt => {
+                //         self.emit_intrinsic_call(&[child.into()], "llvm.sqrt.f64")
+                //     }
+                //     Operator::Abs => {
+                //         self.emit_intrinsic_call(&[child.into()], "llvm.fabs.f64")
+                //     }
+                //     Operator::Minus => self.builder.build_float_neg(child, "negation"),
+                //     Operator::Not => todo!(),
+                //
+                //     _ => unreachable!(),
+                // }
 
-                match op {
-                    Operator::PiTimes => self.builder.build_float_mul(
-                        self.f64_t.const_float(std::f64::consts::PI),
-                        child,
-                        "ret",
-                    ),
-                    Operator::Sqrt => {
-                        self.emit_intrinsic_call(&[child.into()], "llvm.sqrt.f64")
-                    }
-                    Operator::Abs => {
-                        self.emit_intrinsic_call(&[child.into()], "llvm.fabs.f64")
-                    }
-                    Operator::Minus => self.builder.build_float_neg(child, "negation"),
-                    Operator::Not => todo!(),
-
-                    _ => unreachable!(),
-                }
+                todo!()
             }
 
             Expr::BinOp { lhs, op, rhs } => {
@@ -243,10 +269,11 @@ impl<'a> RecursiveBuilder<'a> {
 
                 match op {
                     Operator::Power => self
-                        .emit_intrinsic_call(&[lhs.into(), rhs.into()], "llvm.pow.f64"),
+                        .emit_call(&[lhs.into(), rhs.into()], "llvm.pow.f64")
+                        .map(LLValue::Float),
                     Operator::Plus => self.add(lhs, rhs),
                     Operator::Minus => self.sub(lhs, rhs),
-                    Operator::Times => self.mul(lhs, rhs), 
+                    Operator::Times => self.mul(lhs, rhs),
                     Operator::Slash => self.div(lhs, rhs),
                     Operator::DoubleEqual
                     | Operator::Greater
@@ -272,8 +299,7 @@ impl<'a> RecursiveBuilder<'a> {
                             .as_basic_value_enum()
                             .into_int_value();
 
-                        self
-                            .builder
+                        self.builder
                             .build_signed_int_to_float(ret_i, self.f64_t, "ret")
                             .map(LLValue::Float)
                     }
