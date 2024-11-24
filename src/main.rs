@@ -14,7 +14,7 @@ use koan::repl::repl;
 
 fn main() {
     let mut jit = Jit::default();
-    let code = jit.compile("1 + 2").unwrap();
+    let code = jit.compile("2 ^ 3").unwrap();
     let func = unsafe { std::mem::transmute::<*const u8, fn() -> f64>(code) };
 
     println!("{}", func());

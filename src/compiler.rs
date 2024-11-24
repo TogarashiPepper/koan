@@ -28,6 +28,15 @@ extern "C" fn cmp_tol_std(l: f64, r: f64) -> f64 {
     From::from((l - r).abs() <= ct)
 }
 
+extern "C" fn not_std(a: f64) -> f64 {
+    if a == 0.0 {
+        1.0
+    }
+    else {
+        0.0
+    }
+}
+
 /// The basic JIT class.
 pub struct Jit {
     /// The function builder context, which is reused across multiple
@@ -58,7 +67,6 @@ impl Default for Jit {
         let isa = isa_builder
             .finish(settings::Flags::new(flag_builder))
             .unwrap();
-
         let mut builder = JITBuilder::with_isa(isa, default_libcall_names());
 
         let pow_addr: *const u8 = pow_std as *const u8;
@@ -66,6 +74,9 @@ impl Default for Jit {
 
         let cmp_tol_addr: *const u8 = cmp_tol_std as *const u8;
         builder.symbol("cmp_tol", cmp_tol_addr);
+
+        let not_addr: *const u8 = not_std as *const u8;
+        builder.symbol("not_std", not_addr);
 
         let module = JITModule::new(builder);
 
@@ -122,7 +133,6 @@ impl Jit {
                 builder.seal_block(entry_bl);
 
                 let mut translator = FunctionTranslator {
-                    int: f64_ty,
                     builder,
                     variables: HashMap::new(),
                     module: &mut self.module,
@@ -146,7 +156,6 @@ impl Jit {
 }
 
 struct FunctionTranslator<'a> {
-    int: types::Type,
     builder: FunctionBuilder<'a>,
     variables: HashMap<String, Variable>,
     module: &'a mut JITModule,
@@ -171,7 +180,7 @@ impl<'a> FunctionTranslator<'a> {
 
         let callee = self
             .module
-            .declare_function(name, Linkage::Local, &sig)
+            .declare_function(name, Linkage::Import, &sig)
             .expect("problem declaring function");
 
         let local_callee: ir::FuncRef =
@@ -191,14 +200,11 @@ impl<'a> FunctionTranslator<'a> {
 
                 match op {
                     Operator::Power => self.call_stdlib("pow", &[lhs, rhs]),
+                    Operator::DoubleEqual => self.call_stdlib("cmp_tol", &[lhs, rhs]),
                     Operator::Plus => self.builder.ins().fadd(lhs, rhs),
                     Operator::Minus => self.builder.ins().fsub(lhs, rhs),
                     Operator::Times => self.builder.ins().fmul(lhs, rhs),
                     Operator::Slash => self.builder.ins().fdiv(lhs, rhs),
-
-                    // TODO: replace this with an in-rust stdlib func that also does
-                    // tolerant comparision
-                    Operator::DoubleEqual => self.call_stdlib("cmp_tol", &[lhs, rhs]),
                     Operator::Greater => {
                         self.builder.ins().fcmp(FloatCC::GreaterThan, lhs, rhs)
                     }
@@ -235,9 +241,7 @@ impl<'a> FunctionTranslator<'a> {
                     Operator::Minus => self.builder.ins().fneg(rhs),
                     Operator::Abs => self.builder.ins().fabs(rhs),
 
-                    // This seems like a PITA to impl in IR
-                    // TODO: impl this as a rust fn and call it from CL
-                    Operator::Not => todo!(),
+                    Operator::Not => self.call_stdlib("not_std", &[rhs]),
 
                     _ => unreachable!(),
                 }
