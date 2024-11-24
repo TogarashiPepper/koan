@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use crate::{
     error::KoanError,
-    lexer::{self, lex, Operator},
+    lexer::{self, Operator},
     parser::{self, Ast},
     pool::{Expr, ExprPool, ExprRef},
 };
 
-use codegen::{ir, verify_function};
+use codegen::ir;
 use cranelift::{
     jit::{JITBuilder, JITModule},
     module::{default_libcall_names, Linkage, Module},
@@ -31,10 +31,21 @@ extern "C" fn cmp_tol_std(l: f64, r: f64) -> f64 {
 extern "C" fn not_std(a: f64) -> f64 {
     if a == 0.0 {
         1.0
-    }
-    else {
+    } else {
         0.0
     }
+}
+
+extern "C" fn and_std(l: f64, r: f64) -> f64 {
+    let res = (l == 0.0 && r == 0.0) || (l == 1.0 && r == 1.0);
+
+    From::from(res)
+}
+
+extern "C" fn or_std(l: f64, r: f64) -> f64 {
+    let res = l == 1.0 || r == 1.0;
+
+    From::from(res)
 }
 
 /// The basic JIT class.
@@ -77,6 +88,12 @@ impl Default for Jit {
 
         let not_addr: *const u8 = not_std as *const u8;
         builder.symbol("not_std", not_addr);
+
+        let and_addr: *const u8 = and_std as *const u8;
+        builder.symbol("and_std", and_addr);
+
+        let or_addr: *const u8 = or_std as *const u8;
+        builder.symbol("or_std", or_addr);
 
         let module = JITModule::new(builder);
 
@@ -222,8 +239,8 @@ impl<'a> FunctionTranslator<'a> {
                     Operator::NotEqual => {
                         self.builder.ins().fcmp(FloatCC::NotEqual, lhs, rhs)
                     }
-                    Operator::DoublePipe => todo!(),
-                    Operator::DoubleAnd => todo!(),
+                    Operator::DoublePipe => self.call_stdlib("or_std", &[lhs, rhs]),
+                    Operator::DoubleAnd => self.call_stdlib("and_std", &[lhs, rhs]),
 
                     _ => unreachable!(),
                 }
