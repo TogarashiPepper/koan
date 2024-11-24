@@ -1,307 +1,220 @@
-mod llvalue;
-
-use inkwell::{
-    builder::{Builder, BuilderError},
-    context::Context,
-    execution_engine::JitFunction,
-    memory_buffer::MemoryBuffer,
-    module::Module,
-    types::FloatType,
-    values::{
-        BasicMetadataValueEnum, BasicValue, FloatValue, FunctionValue, GlobalValue,
-    },
-    AddressSpace, FloatPredicate, OptimizationLevel,
-};
+use std::collections::HashMap;
 
 use crate::{
-    lexer::{lex, Operator},
-    parser::{parse, Ast},
+    error::KoanError,
+    lexer::{self, lex, Operator},
+    parser::{self, Ast},
     pool::{Expr, ExprPool, ExprRef},
 };
 
-use llvalue::LLValue;
+use codegen::{ir, verify_function};
+use cranelift::{
+    jit::{JITBuilder, JITModule},
+    module::{default_libcall_names, Linkage, Module},
+    native::builder,
+    prelude::*,
+};
 
-fn create_printf<'a>(
-    context: &'a Context,
-    module: &Module<'a>,
-) -> (FunctionValue<'a>, GlobalValue<'a>) {
-    let printf_format = "%f\n";
-    let printf_format_type = context
-        .i8_type()
-        .array_type((printf_format.len() + 1) as u32);
-    let printf_format_global =
-        module.add_global(printf_format_type, None, "write_format");
+const COMPARISON_TOLERANCE: f64 = 1e-14;
 
-    printf_format_global
-        .set_initializer(&context.const_string(printf_format.as_bytes(), true));
-
-    let printf_args = [context.ptr_type(AddressSpace::default()).into()];
-
-    let printf_type = context.f32_type().fn_type(&printf_args, true);
-    let printf_fn = module.add_function("printf", printf_type, None);
-
-    (printf_fn, printf_format_global)
+extern "C" fn pow_std(a: f64, b: f64) -> f64 {
+    a.powf(b)
 }
 
-struct RecursiveBuilder<'a> {
-    f64_t: FloatType<'a>,
-    module: Module<'a>,
-    context: &'a Context,
-    builder: Builder<'a>,
-    pool: ExprPool,
-    printf: (FunctionValue<'a>, GlobalValue<'a>),
+extern "C" fn cmp_tol_std(l: f64, r: f64) -> f64 {
+    let max = l.abs().max(r.abs());
+    let ct = COMPARISON_TOLERANCE * max;
+
+    From::from((l - r).abs() <= ct)
 }
 
-impl<'a> RecursiveBuilder<'a> {
-    pub fn new(context: &'a Context, pool: ExprPool) -> Self {
-        let module = context.create_module("main");
-        let f64_t = context.f64_type();
-        let builder = context.create_builder();
-        let printf = create_printf(context, &module);
+/// The basic JIT class.
+pub struct Jit {
+    /// The function builder context, which is reused across multiple
+    /// FunctionBuilder instances.
+    builder_context: FunctionBuilderContext,
 
-        let bin_intrinsic_type = f64_t.fn_type(&[f64_t.into(), f64_t.into()], false);
-        let un_intrinsic_type = f64_t.fn_type(&[f64_t.into()], false);
-        module.add_function("llvm.pow.f64", bin_intrinsic_type, None);
-        module.add_function("llvm.sqrt.f64", un_intrinsic_type, None);
-        module.add_function("llvm.fabs.f64", un_intrinsic_type, None);
+    /// The main Cranelift context, which holds the state for codegen. Cranelift
+    /// separates this from `Module` to allow for parallel compilation, with a
+    /// context per thread, though this isn't in the simple demo here.
+    ctx: codegen::Context,
 
-        // TODO: Handle error
-        let mut bytes = std::fs::read("./stdlib/stdlib.ll").unwrap();
+    /// The module, with the jit backend, which manages the JIT'd
+    /// functions.
+    module: JITModule,
+}
 
-        // Append null byte for llvm since it expects null terminated strings
-        bytes.push(0);
+impl Default for Jit {
+    fn default() -> Self {
+        let mut flag_builder = settings::builder();
 
-        let mem_buffer =
-            MemoryBuffer::create_from_memory_range_copy(&bytes, "stdmembuffer");
-        let std_module = context.create_module_from_ir(mem_buffer).unwrap();
+        flag_builder.set("use_colocated_libcalls", "false").unwrap();
+        flag_builder.set("is_pic", "false").unwrap();
 
-        module.link_in_module(std_module).unwrap();
+        let isa_builder = builder().unwrap_or_else(|msg| {
+            panic!("host machine is not supported: {}", msg);
+        });
+
+        let isa = isa_builder
+            .finish(settings::Flags::new(flag_builder))
+            .unwrap();
+
+        let mut builder = JITBuilder::with_isa(isa, default_libcall_names());
+
+        let pow_addr: *const u8 = pow_std as *const u8;
+        builder.symbol("pow", pow_addr);
+
+        let cmp_tol_addr: *const u8 = cmp_tol_std as *const u8;
+        builder.symbol("cmp_tol", cmp_tol_addr);
+
+        let module = JITModule::new(builder);
 
         Self {
-            f64_t,
+            builder_context: FunctionBuilderContext::new(),
+            ctx: module.make_context(),
             module,
-            builder,
-            context,
-            pool,
-            printf,
         }
     }
+}
 
-    pub fn exec(self) {
-        llvm_jit_exec(self.module);
+impl Jit {
+    pub fn compile(&mut self, input: &str) -> Result<*const u8, KoanError> {
+        let tokens = lexer::lex(input)?;
+        let (mut stmts, pool) = parser::parse(tokens)?;
+
+        // TODO: actually handle translating multiple statements
+        self.translate(stmts.pop().unwrap(), pool)?;
+
+        let id = self
+            .module
+            .declare_function("main", Linkage::Export, &self.ctx.func.signature)
+            .unwrap();
+
+        self.module.define_function(id, &mut self.ctx).unwrap();
+
+        self.module.clear_context(&mut self.ctx);
+        self.module.finalize_definitions().unwrap();
+
+        let code = self.module.get_finalized_function(id);
+
+        Ok(code)
     }
 
-    fn emit_print<'c, 'b: 'c>(&'b self, value: ExprRef) -> Result<(), BuilderError> {
-        let value = match self.build(value)? {
-            LLValue::Float(v) => v.into(),
-            LLValue::Array(v) => v.into(),
-        };
+    fn translate(&mut self, ast: Ast, pool: ExprPool) -> Result<(), KoanError> {
+        let f64_ty = types::F64;
 
-        let args: &[BasicMetadataValueEnum<'c>] =
-            &[self.printf.1.as_pointer_value().into(), value];
+        match ast {
+            Ast::Expression(eref) | Ast::Statement(eref) => {
+                let is_expr = matches!(ast, Ast::Expression(_));
 
-        self.builder
-            .build_call(self.printf.0, args, "write_call")
-            .unwrap();
+                if is_expr {
+                    // Expressions are just IIFEs that take nothing and return a float (for now)
+                    self.ctx.func.signature.returns.push(AbiParam::new(f64_ty));
+                }
+
+                let mut builder =
+                    FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+
+                let entry_bl = builder.create_block();
+
+                builder.append_block_params_for_function_params(entry_bl);
+                builder.switch_to_block(entry_bl);
+                builder.seal_block(entry_bl);
+
+                let mut translator = FunctionTranslator {
+                    int: f64_ty,
+                    builder,
+                    variables: HashMap::new(),
+                    module: &mut self.module,
+                };
+
+                let rval = translator.translate_expr(eref, &pool);
+
+                if is_expr {
+                    translator.builder.ins().return_(&[rval]);
+                }
+
+                translator.builder.finalize();
+            }
+            Ast::Block(_) => todo!(),
+            Ast::LetDecl { name, ty, body } => todo!(),
+            Ast::FunDecl { name, params, body } => todo!(),
+        }
 
         Ok(())
     }
+}
 
-    pub fn emit_main_func(&self, ast: Ast) {
-        let fn_type = self.f64_t.fn_type(&[], false);
-        let function = self.module.add_function("main", fn_type, None);
-        let basic_block = self.context.append_basic_block(function, "entry");
+struct FunctionTranslator<'a> {
+    int: types::Type,
+    builder: FunctionBuilder<'a>,
+    variables: HashMap<String, Variable>,
+    module: &'a mut JITModule,
+}
 
-        self.builder.position_at_end(basic_block);
-
-        let Ast::Expression(ast) = ast else {
-            unreachable!()
-        };
-        let sum = self.build(ast).unwrap();
-
-        match sum {
-            LLValue::Float(r) => self.builder.build_return(Some(&r)).unwrap(),
-            LLValue::Array(r) => self.builder.build_return(Some(&r)).unwrap(),
-        };
-
-        self.module.verify().unwrap();
+impl<'a> FunctionTranslator<'a> {
+    fn translate_assign(&mut self, name: &str, eref: ExprRef, pool: &ExprPool) -> Value {
+        let new_value = self.translate_expr(eref, pool);
+        let variable = self.variables.get(name).unwrap();
+        self.builder.def_var(*variable, new_value);
+        new_value
     }
 
-    // Calls an intrinsic that takes two args
-    fn emit_call<'b, 'c: 'b>(
-        &'b self,
-        args: &[BasicMetadataValueEnum<'c>],
-        name: &'static str,
-    ) -> Result<FloatValue, BuilderError> {
-        let intrinsic = self.module.get_function(name).unwrap();
-        let res = self
-            .builder
-            .build_direct_call(intrinsic, args, "ret")?
-            .try_as_basic_value()
-            .left()
-            .unwrap()
-            .into_float_value();
+    fn call_stdlib(&mut self, name: &str, args: &[Value]) -> Value {
+        let mut sig = self.module.make_signature();
 
-        Ok(res)
-    }
-
-    fn add<'s>(
-        &'s self,
-        lhs: LLValue<'s>,
-        rhs: LLValue<'s>,
-    ) -> Result<LLValue<'s>, BuilderError> {
-        match (lhs, rhs) {
-            (LLValue::Float(l), LLValue::Float(r)) => self
-                .builder
-                .build_float_add(l, r, "fadd")
-                .map(LLValue::Float),
-            (LLValue::Float(_), LLValue::Array(_)) => todo!(),
-            (LLValue::Array(_), LLValue::Float(_)) => todo!(),
-            (LLValue::Array(_), LLValue::Array(_)) => todo!(),
+        for _arg in args {
+            sig.params.push(AbiParam::new(types::F64));
         }
+
+        sig.returns.push(AbiParam::new(types::F64));
+
+        let callee = self
+            .module
+            .declare_function(name, Linkage::Local, &sig)
+            .expect("problem declaring function");
+
+        let local_callee: ir::FuncRef =
+            self.module.declare_func_in_func(callee, self.builder.func);
+
+        let call = self.builder.ins().call(local_callee, args);
+
+        *self.builder.inst_results(call).first().unwrap()
     }
 
-    fn sub<'s>(
-        &'s self,
-        lhs: LLValue<'s>,
-        rhs: LLValue<'s>,
-    ) -> Result<LLValue<'s>, BuilderError> {
-        match (lhs, rhs) {
-            (LLValue::Float(lhs), LLValue::Float(rhs)) => self
-                .builder
-                .build_float_sub(lhs, rhs, "fsub")
-                .map(LLValue::Float),
-            (LLValue::Float(_), LLValue::Array(_)) => todo!(),
-            (LLValue::Array(_), LLValue::Float(_)) => todo!(),
-            (LLValue::Array(_), LLValue::Array(_)) => todo!(),
-        }
-    }
-
-    fn div<'s>(
-        &'s self,
-        lhs: LLValue<'s>,
-        rhs: LLValue<'s>,
-    ) -> Result<LLValue, BuilderError> {
-        match (lhs, rhs) {
-            (LLValue::Float(lhs), LLValue::Float(rhs)) => self
-                .builder
-                .build_float_div(lhs, rhs, "fdiv")
-                .map(LLValue::Float),
-            (LLValue::Float(_), LLValue::Array(_)) => todo!(),
-            (LLValue::Array(_), LLValue::Float(_)) => todo!(),
-            (LLValue::Array(_), LLValue::Array(_)) => todo!(),
-        }
-    }
-
-    fn mul<'s>(
-        &'s self,
-        lhs: LLValue<'s>,
-        rhs: LLValue<'s>,
-    ) -> Result<LLValue, BuilderError> {
-        match (lhs, rhs) {
-            (LLValue::Float(lhs), LLValue::Float(rhs)) => self
-                .builder
-                .build_float_mul(lhs, rhs, "fmul")
-                .map(LLValue::Float),
-            (LLValue::Float(_), LLValue::Array(_)) => todo!(),
-            (LLValue::Array(_), LLValue::Float(_)) => todo!(),
-            (LLValue::Array(_), LLValue::Array(_)) => todo!(),
-        }
-    }
-
-    fn pow<'s>(
-        &'s self,
-        lhs: LLValue<'s>,
-        rhs: LLValue<'s>,
-    ) -> Result<LLValue<'s>, BuilderError> {
-        match (lhs, rhs) {
-            (LLValue::Float(l), LLValue::Float(r)) => self
-                .emit_call(&[l.into(), r.into()], "std_pow")
-                .map(LLValue::Float),
-            (LLValue::Float(_), LLValue::Array(_)) => todo!(),
-            (LLValue::Array(_), LLValue::Float(_)) => todo!(),
-            (LLValue::Array(_), LLValue::Array(_)) => todo!(),
-        }
-    }
-
-    // TODO: split into
-    // `build_float :: whatever -> Result<FloatValue>`
-    // and
-    // `build_array :: whatever -> Result<StructValue>`
-    // Type checker can be used to determine which to call, build method should wrap those 2
-    pub fn build(&self, ast: ExprRef) -> Result<LLValue, BuilderError> {
-        let exp_ref = self.pool.get(ast);
-
-        match exp_ref {
-            Expr::NumLit(n) => Ok(LLValue::Float(self.f64_t.const_float(*n))),
-            Expr::PreOp { op, rhs } => {
-                // let op = *op;
-                // let child = self.build(*rhs)?;
-                //
-                // match op {
-                //     Operator::PiTimes => self
-                //         .builder
-                //         .build_float_mul(
-                //             self.f64_t.const_float(std::f64::consts::PI),
-                //             child,
-                //             "ret",
-                //         )
-                //         .map(LLValue::Float),
-                //     Operator::Sqrt => {
-                //         self.emit_intrinsic_call(&[child.into()], "llvm.sqrt.f64")
-                //     }
-                //     Operator::Abs => {
-                //         self.emit_intrinsic_call(&[child.into()], "llvm.fabs.f64")
-                //     }
-                //     Operator::Minus => self.builder.build_float_neg(child, "negation"),
-                //     Operator::Not => todo!(),
-                //
-                //     _ => unreachable!(),
-                // }
-
-                todo!()
-            }
-
+    fn translate_expr(&mut self, eref: ExprRef, pool: &ExprPool) -> Value {
+        match pool.get(eref) {
+            Expr::NumLit(num) => self.builder.ins().f64const(*num),
             Expr::BinOp { lhs, op, rhs } => {
-                let op = *op;
-                let lhs = self.build(*lhs)?;
-                let rhs = self.build(*rhs)?;
+                let lhs = self.translate_expr(*lhs, pool);
+                let rhs = self.translate_expr(*rhs, pool);
 
                 match op {
-                    Operator::Power => self
-                        .emit_call(&[lhs.into(), rhs.into()], "llvm.pow.f64")
-                        .map(LLValue::Float),
-                    Operator::Plus => self.add(lhs, rhs),
-                    Operator::Minus => self.sub(lhs, rhs),
-                    Operator::Times => self.mul(lhs, rhs),
-                    Operator::Slash => self.div(lhs, rhs),
-                    Operator::DoubleEqual
-                    | Operator::Greater
-                    | Operator::GreaterEqual
-                    | Operator::Lesser
-                    | Operator::LesserEqual
-                    | Operator::NotEqual => {
-                        // TODO: implement tolerant comparison in llvm ir
-                        let cmp_var = match op {
-                            Operator::DoubleEqual => FloatPredicate::OEQ,
-                            Operator::Greater => FloatPredicate::OGT,
-                            Operator::GreaterEqual => FloatPredicate::OGE,
-                            Operator::Lesser => FloatPredicate::OLT,
-                            Operator::LesserEqual => FloatPredicate::OLE,
-                            Operator::NotEqual => FloatPredicate::ONE,
+                    Operator::Power => self.call_stdlib("pow", &[lhs, rhs]),
+                    Operator::Plus => self.builder.ins().fadd(lhs, rhs),
+                    Operator::Minus => self.builder.ins().fsub(lhs, rhs),
+                    Operator::Times => self.builder.ins().fmul(lhs, rhs),
+                    Operator::Slash => self.builder.ins().fdiv(lhs, rhs),
 
-                            _ => unreachable!(),
-                        };
-
-                        let ret_i = self
-                            .builder
-                            .build_float_compare(cmp_var, lhs, rhs, "ret")?
-                            .as_basic_value_enum()
-                            .into_int_value();
-
+                    // TODO: replace this with an in-rust stdlib func that also does
+                    // tolerant comparision
+                    Operator::DoubleEqual => self.call_stdlib("cmp_tol", &[lhs, rhs]),
+                    Operator::Greater => {
+                        self.builder.ins().fcmp(FloatCC::GreaterThan, lhs, rhs)
+                    }
+                    Operator::GreaterEqual => {
                         self.builder
-                            .build_signed_int_to_float(ret_i, self.f64_t, "ret")
-                            .map(LLValue::Float)
+                            .ins()
+                            .fcmp(FloatCC::GreaterThanOrEqual, lhs, rhs)
+                    }
+                    Operator::Lesser => {
+                        self.builder.ins().fcmp(FloatCC::LessThan, lhs, rhs)
+                    }
+                    Operator::LesserEqual => {
+                        self.builder.ins().fcmp(FloatCC::LessThanOrEqual, lhs, rhs)
+                    }
+                    Operator::NotEqual => {
+                        self.builder.ins().fcmp(FloatCC::NotEqual, lhs, rhs)
                     }
                     Operator::DoublePipe => todo!(),
                     Operator::DoubleAnd => todo!(),
@@ -309,97 +222,35 @@ impl<'a> RecursiveBuilder<'a> {
                     _ => unreachable!(),
                 }
             }
+            Expr::PreOp { op, rhs } => {
+                let rhs = self.translate_expr(*rhs, pool);
+
+                match op {
+                    Operator::PiTimes => {
+                        let pi = self.builder.ins().f64const(std::f64::consts::PI);
+
+                        self.builder.ins().fmul(pi, rhs)
+                    }
+                    Operator::Sqrt => self.builder.ins().sqrt(rhs),
+                    Operator::Minus => self.builder.ins().fneg(rhs),
+                    Operator::Abs => self.builder.ins().fabs(rhs),
+
+                    // This seems like a PITA to impl in IR
+                    // TODO: impl this as a rust fn and call it from CL
+                    Operator::Not => todo!(),
+
+                    _ => unreachable!(),
+                }
+            }
             Expr::Ident(_) => todo!(),
             Expr::StrLit(_) => todo!(),
-            Expr::FunCall(name, args) => match name.as_str() {
-                "print" => {
-                    for arg in args {
-                        self.emit_print(*arg)?;
-                    }
-
-                    Ok(self.f64_t.const_zero())
-                }
-
-                _ => todo!(),
-            },
-            Expr::Array(exprs) => {
-                // TODO: figure out what sign_extend does and also document that 32bit targets are
-                // unsupported
-                let size = self.context.i32_type().const_int(exprs.len() as u64, false);
-                let karray_ty = self.module.get_struct_type("struct.KoanArray").unwrap();
-
-                let arr_ptr = self.builder.build_alloca(karray_ty, "karrayptr")?;
-
-                // TODO: proper error handling, maybe util method?
-                // TODO: run destructor, at end of current block(?)
-                let array_init = self.module.get_function("init_array").unwrap();
-
-                self.builder.build_direct_call(
-                    array_init,
-                    &[size.into(), arr_ptr.into()],
-                    "koanarray",
-                )?;
-
-                let array_push = self.module.get_function("push_array").unwrap();
-
-                for expr in exprs {
-                    // TODO: make a float-only self.build or introduce type check
-                    let child = self.build(*expr)?;
-
-                    self.builder.build_direct_call(
-                        array_push,
-                        &[arr_ptr.into(), child.into()],
-                        "pushed_void",
-                    )?;
-                }
-
-                // let array_print_details =
-                //     self.module.get_function("print_array").unwrap();
-                // let array_print_elems =
-                //     self.module.get_function("print_arr_elems").unwrap();
-                //
-                // self.builder.build_direct_call(
-                //     array_print_elems,
-                //     &[arr_ptr.into()],
-                //     "printed_void",
-                // )?;
-                //
-                // self.builder.build_direct_call(
-                //     array_print_details,
-                //     &[arr_ptr.into()],
-                //     "printed_void",
-                // )?;
-
-                let _ = self.module.print_to_file("llvmirdebugoutput.llvm");
-
-                Ok(self.f64_t.const_zero())
-            }
+            Expr::FunCall(_, _) => todo!(),
+            Expr::Array(_) => todo!(),
             Expr::IfElse {
                 cond,
                 body,
                 else_body,
             } => todo!(),
         }
-    }
-}
-
-pub fn compile(_ast: Ast, _pool: ExprPool) {
-    let (ast, pool) = lex("[1, 2, 3, 4, 5]").and_then(parse).unwrap();
-    let context = Context::create();
-    let codegen = RecursiveBuilder::new(&context, pool);
-    codegen.emit_main_func(ast[0].clone());
-    codegen.exec();
-}
-
-fn llvm_jit_exec(module: Module) {
-    let exec_engine = module
-        .create_jit_execution_engine(OptimizationLevel::None)
-        .unwrap();
-
-    unsafe {
-        type FloaPow = unsafe extern "C" fn() -> f64;
-
-        let add: JitFunction<FloaPow> = exec_engine.get_function("main").unwrap();
-        println!("{}", add.call());
     }
 }
