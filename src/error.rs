@@ -32,6 +32,8 @@ pub enum ParseError {
     ExpectedFound(TokenType, TokenType),
     #[error("Unexpected `{0:?}` token found")]
     Unexpected(TokenType),
+    #[error("Cannot shadow variable `{0}`")]
+    Shadowed(String),
 }
 
 #[derive(Error, Debug, PartialEq)]

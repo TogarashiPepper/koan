@@ -1,6 +1,9 @@
 mod utils;
 
-use std::iter::Peekable;
+use std::{
+    collections::{HashMap, HashSet},
+    iter::Peekable,
+};
 
 use crate::{
     error::{ParseError, Result},
@@ -34,9 +37,12 @@ pub fn parse(tokens: Vec<Token<'_>>) -> Result<(Vec<Ast>, ExprPool)> {
 }
 
 pub fn parse_with_pool(tokens: Vec<Token<'_>>, pool: &mut ExprPool) -> Result<Vec<Ast>> {
+    let variables = HashSet::from(["π".to_owned(), "e".to_owned()]);
+
     let mut it = TokenStream {
         it: tokens.into_iter().peekable(),
         pool,
+        variables,
     };
 
     it.program(false)
@@ -45,6 +51,7 @@ pub fn parse_with_pool(tokens: Vec<Token<'_>>, pool: &mut ExprPool) -> Result<Ve
 pub struct TokenStream<'a, T: Iterator<Item = Token<'a>>> {
     pub it: Peekable<T>,
     pub pool: &'a mut ExprPool,
+    variables: HashSet<String>,
 }
 
 impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
@@ -90,22 +97,32 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
     }
 
     pub fn fun_def(&mut self) -> Result<Ast> {
+        self.variables.clear();
+
         let [_, ident] = self.multi_expect(&[TokenType::Fun, TokenType::Ident])?;
-        // TODO: parse type annotations
-        let params = self.list(
-            (Some(TokenType::LParen), TokenType::RParen),
-            TokenType::Comma,
-            // list method already peaked b4 calling
-            |stream| stream.expect(TokenType::Ident),
-        )?;
+        let params: Vec<(String, ValTy)> = self
+            .list(
+                (Some(TokenType::LParen), TokenType::RParen),
+                TokenType::Comma,
+                // list method already peaked b4 calling
+                |stream| stream.expect(TokenType::Ident),
+            )?
+            .into_iter()
+            // TODO: actually handle types rather than assuming number
+            .map(|t| (t.lexeme.to_string(), ValTy::Number))
+            .collect();
+
+        for (name, _) in params.iter() {
+            self.variables.insert(name.to_owned());
+        }
+
         let block = self.block()?;
+
+        self.variables.clear();
 
         Ok(Ast::FunDecl {
             name: ident.lexeme.to_owned(),
-            params: params
-                .into_iter()
-                .map(|t| (t.lexeme.to_string(), ValTy::Number))
-                .collect(),
+            params,
             body: Box::new(block),
         })
     }
@@ -128,9 +145,17 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         ])?;
         let body = self.expr_bp(0)?;
         let _ = self.expect(TokenType::Semicolon)?;
+        let ident = ident.lexeme.to_owned();
+
+        if self.variables.contains(&ident) {
+            return Err(ParseError::Shadowed(ident).into());
+        }
+        else {
+            self.variables.insert(ident.clone());
+        }
 
         Ok(Ast::LetDecl {
-            name: ident.lexeme.to_owned(),
+            name: ident,
             body,
             ty: None,
         })
@@ -210,6 +235,7 @@ mod tests {
             },
         )
     }
+
 
     // TODO:
     // #[test]

@@ -1,8 +1,7 @@
-use std::{io::stdout, path::PathBuf, process::exit};
+use std::{io::stdout, path::PathBuf};
 
 use koan::{
-    compiler::Jit,
-    error::{handle_err, CliError, KoanError, Result},
+    error::{CliError, KoanError, Result},
     interpreter::IntrpCtx,
     lexer::lex,
     parser::parse,
@@ -13,11 +12,14 @@ use koan::{
 use koan::repl::repl;
 
 fn main() {
-    let mut jit = Jit::default();
-    let code = jit.compile("0 || 1").unwrap();
-    let func = unsafe { std::mem::transmute::<*const u8, fn() -> f64>(code) };
+    // let mut jit = Jit::default();
+    // let code = jit.compile("0 || 1").unwrap();
+    // let func = unsafe { std::mem::transmute::<*const u8, fn() -> f64>(code) };
 
-    println!("{}", func());
+    println!(
+        "{:#?}",
+        parse(lex("fun foo(x) {} let x = 10;").unwrap()).unwrap()
+    );
 
     // let mut arg_it = std::env::args();
     // arg_it.next();
