@@ -25,6 +25,56 @@ pub enum Expr {
     },
 }
 
+impl Expr {
+    pub fn expr_eq(lhs: ExprRef, rhs: ExprRef, l_pool: &ExprPool, r_pool: &ExprPool) -> bool {
+        let lhs = l_pool.get(lhs);
+        let rhs = r_pool.get(rhs);
+
+        match (lhs, rhs) {
+            (
+                Expr::BinOp {
+                    lhs: ll,
+                    op: lop,
+                    rhs: lr,
+                },
+                Expr::BinOp {
+                    lhs: rl,
+                    op: rop,
+                    rhs: rr,
+                },
+            ) => {
+                lop == rop
+                    && Self::expr_eq(*ll, *rl, l_pool, r_pool)
+                    && Self::expr_eq(*lr, *rr, l_pool, r_pool)
+            }
+            (Expr::PreOp { op: lop, rhs: lr }, Expr::PreOp { op: rop, rhs: rr }) => {
+                lop == rop && Self::expr_eq(*lr, *rr, l_pool, r_pool)
+            }
+            (Expr::Ident(l), Expr::Ident(r)) => l == r,
+            (Expr::NumLit(l), Expr::NumLit(r)) => l == r,
+            (Expr::StrLit(l), Expr::StrLit(r)) => l == r,
+            (Expr::FunCall(lname, lparams), Expr::FunCall(rname, rparams)) => {
+                let it = lparams
+                    .iter()
+                    .zip(rparams)
+                    .all(|(l, r)| Self::expr_eq(*l, *r, l_pool, r_pool));
+
+                lname == rname && lparams.len() == rparams.len() && it
+            }
+            (Expr::Array(larr), Expr::Array(rarr)) => {
+                let it = larr
+                    .iter()
+                    .zip(rarr)
+                    .all(|(l, r)| Self::expr_eq(*l, *r, l_pool, r_pool));
+
+                larr.len() == rarr.len() && it
+            }
+
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct ExprRef(usize);
 

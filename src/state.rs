@@ -7,6 +7,7 @@ use std::{collections::HashMap, f64};
 #[derive(Debug, Clone)]
 pub struct Function {
     pub params: Vec<(String, ValTy)>,
+    pub ret: ValTy,
     pub body: Ast,
 }
 

@@ -116,6 +116,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use crate::{
         error::Result,
         lexer::{lex, Operator, Token},
@@ -123,60 +125,13 @@ mod tests {
         pool::{Expr, ExprPool, ExprRef},
     };
 
-    fn expr_eq(lhs: ExprRef, rhs: ExprRef, l_pool: &ExprPool, r_pool: &ExprPool) -> bool {
-        let lhs = l_pool.get(lhs);
-        let rhs = r_pool.get(rhs);
-
-        match (lhs, rhs) {
-            (
-                Expr::BinOp {
-                    lhs: ll,
-                    op: lop,
-                    rhs: lr,
-                },
-                Expr::BinOp {
-                    lhs: rl,
-                    op: rop,
-                    rhs: rr,
-                },
-            ) => {
-                lop == rop
-                    && expr_eq(*ll, *rl, l_pool, r_pool)
-                    && expr_eq(*lr, *rr, l_pool, r_pool)
-            }
-            (Expr::PreOp { op: lop, rhs: lr }, Expr::PreOp { op: rop, rhs: rr }) => {
-                lop == rop && expr_eq(*lr, *rr, l_pool, r_pool)
-            }
-            (Expr::Ident(l), Expr::Ident(r)) => l == r,
-            (Expr::NumLit(l), Expr::NumLit(r)) => l == r,
-            (Expr::StrLit(l), Expr::StrLit(r)) => l == r,
-            (Expr::FunCall(lname, lparams), Expr::FunCall(rname, rparams)) => {
-                let it = lparams
-                    .iter()
-                    .zip(rparams)
-                    .all(|(l, r)| expr_eq(*l, *r, l_pool, r_pool));
-
-                lname == rname && lparams.len() == rparams.len() && it
-            }
-            (Expr::Array(larr), Expr::Array(rarr)) => {
-                let it = larr
-                    .iter()
-                    .zip(rarr)
-                    .all(|(l, r)| expr_eq(*l, *r, l_pool, r_pool));
-
-                larr.len() == rarr.len() && it
-            }
-
-            _ => false,
-        }
-    }
-
     pub fn parse_expr(tokens: Vec<Token<'_>>) -> Result<(ExprPool, ExprRef)> {
         let mut pool = ExprPool::new();
 
         let mut it = TokenStream {
             it: tokens.into_iter().peekable(),
             pool: &mut pool,
+            variables: HashSet::from(["π".to_owned(), "e".to_owned()]),
         };
 
         let exp = it.expr_bp(0)?;
@@ -188,7 +143,7 @@ mod tests {
         let mut expected_pool = ExprPool::new();
         let res = func(&mut expected_pool);
 
-        assert!(expr_eq(exp_ref, res, &pool, &expected_pool));
+        assert!(Expr::expr_eq(exp_ref, res, &pool, &expected_pool));
     }
 
     #[test]

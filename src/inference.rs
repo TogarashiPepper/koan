@@ -5,7 +5,6 @@ use crate::{
     lexer::Operator,
     parser::Ast,
     pool::{Expr, ExprPool, ExprRef},
-    state::{Function, State},
     value::ValTy,
 };
 
@@ -14,14 +13,15 @@ use crate::{
 pub struct StateSim {
     // Array of environments, index = depth (i.e. `0` = global scope)
     pub variables: Vec<HashMap<String, ValTy>>,
-    pub functions: HashMap<String, Function>,
+    // TODO: Make tuple into struct, .0 is params, .1 is return type
+    pub functions: HashMap<String, (Vec<ValTy>, ValTy)>,
 }
 
 impl StateSim {
     fn get(&self, k: &str) -> Option<ValTy> {
         for scope in self.variables.iter().rev() {
-            if let Some(x) = scope.get(k) {
-                return Some(x.clone());
+            if let Some(x) = scope.get(k).copied() {
+                return Some(x);
             }
         }
 
@@ -65,12 +65,30 @@ pub fn infer(ast: &Ast, pool: &ExprPool, state_sim: &mut StateSim) -> Result<Val
             res
         }
         Ast::LetDecl { name, ty: _, body } => {
-            let infered = infer_exp(*body, pool, state_sim)?;
-            state_sim.set(name.to_owned(), infered.clone());
+            let inferred = infer_exp(*body, pool, state_sim)?;
+            state_sim.set(name.to_owned(), inferred);
 
-            Ok(infered)
+            Ok(inferred)
         }
-        Ast::FunDecl { name, params, body } => todo!(),
+        Ast::FunDecl {
+            name,
+            params,
+            ret,
+            body,
+        } => {
+            let body_ty = infer(body, pool, state_sim)?;
+
+            if *ret != body_ty {
+                return Err(InterpError::MismatchedReturnTy(*ret, body_ty).into());
+            }
+
+            state_sim.functions.insert(
+                name.to_owned(),
+                (params.iter().map(|x| x.1).collect(), *ret),
+            );
+
+            Ok(ValTy::Nothing)
+        }
     }
 }
 
@@ -102,12 +120,19 @@ fn annotate_inner(ast: Ast, pool: &ExprPool, sim: &mut StateSim) -> Result<Ast> 
 
             Ok(Ast::Block(stmts))
         }
-        Ast::LetDecl {
-            ref name,
-            ty: _,
-            body,
-        } => {
+        Ast::LetDecl { ref name, ty, body } => {
             let inferred = infer(&ast, pool, sim)?;
+
+            if let Some(ty) = ty {
+                if ty != inferred {
+                    return Err(InterpError::InvalidLetType(
+                        inferred.to_string(),
+                        ty.to_string(),
+                    )
+                    .into());
+                }
+            }
+
             let annotated = Ast::LetDecl {
                 name: name.to_owned(),
                 ty: Some(inferred),
@@ -116,7 +141,7 @@ fn annotate_inner(ast: Ast, pool: &ExprPool, sim: &mut StateSim) -> Result<Ast> 
 
             Ok(annotated)
         }
-        Ast::FunDecl { name, params, body } => todo!(),
+        x @ Ast::FunDecl { .. } => Ok(x),
     }
 }
 
@@ -124,11 +149,7 @@ fn annotate_inner(ast: Ast, pool: &ExprPool, sim: &mut StateSim) -> Result<Ast> 
 /// identifier and infers the type of the value held by that idenftifier. This parameter is used to
 /// allow the inference for the AST to provide the `Expr` the information it needs without
 /// providing it the entire scope tree every time.
-pub fn infer_exp(
-    expr: ExprRef,
-    pool: &ExprPool,
-    state_sim: &mut StateSim,
-) -> Result<ValTy> {
+pub fn infer_exp(expr: ExprRef, pool: &ExprPool, state_sim: &mut StateSim) -> Result<ValTy> {
     use ValTy::{Array, Number, String};
 
     let exp = pool.get(expr);
@@ -209,11 +230,52 @@ pub fn infer_exp(
         Expr::Ident(name) => state_sim
             .get(name)
             .ok_or_else(|| KoanError::from(InterpError::UndefVar(name.to_owned())))?,
-        Expr::FunCall(_, _) => todo!(),
+
+        Expr::FunCall(name, params) => {
+            let func = state_sim.functions.get(name).ok_or_else(|| {
+                KoanError::from(InterpError::UndefFunc(name.to_owned()))
+            })?.clone();
+
+            // Ensure params are typed correctly
+            for (given, expected) in params.iter().zip(func.0.iter()) {
+                let ty_given = infer_exp(*given, pool, state_sim)?;
+
+                if ty_given != *expected {
+                    return Err(
+                        InterpError::InvalidParamTy(name.to_owned(), ty_given).into()
+                    );
+                }
+            }
+
+            func.1
+        }
         Expr::IfElse {
             cond,
             body,
             else_body,
-        } => todo!(),
+        } => {
+            // Ensure cond is a number
+            let cond_ty = infer_exp(*cond, pool, state_sim)?;
+
+            if cond_ty != Number {
+                return Err(InterpError::InvalidIfTy.into());
+            }
+
+            let body_ty = infer(body, pool, state_sim)?;
+
+            // Infer requires &mut but we only have &
+            if let Some(else_body) = else_body {
+                let else_ty = infer(else_body, pool, state_sim)?;
+
+                if body_ty != else_ty {
+                    return Err(InterpError::IfBodyMismatch(body_ty, else_ty).into());
+                }
+            }
+            else if body_ty != ValTy::Nothing {
+                return Err(InterpError::IfExprWithoutElse.into());
+            }
+
+            body_ty
+        }
     })
 }

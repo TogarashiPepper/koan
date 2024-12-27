@@ -18,7 +18,8 @@ fn main() {
 
     println!(
         "{:#?}",
-        parse(lex("fun foo(x) {} let x = 10;").unwrap()).unwrap()
+        parse(lex("fun foo(x: string) -> array {}").unwrap()).unwrap()
+        // lex("1 - 2").unwrap()
     );
 
     // let mut arg_it = std::env::args();

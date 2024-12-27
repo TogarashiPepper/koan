@@ -2,7 +2,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     error::{InterpError, Result},
-    inferance::annotate,
+    inference::annotate,
     lexer::Operator,
     parser::Ast,
     pool::{Expr, ExprPool, ExprRef},
@@ -303,7 +303,12 @@ impl<W: Write> IntrpCtx<'_, W> {
                     None => Value::Nothing,
                 })
             }
-            Ast::FunDecl { name, params, body } => {
+            Ast::FunDecl {
+                name,
+                params,
+                ret,
+                body,
+            } => {
                 if self.state.variables.len() != 1 {
                     return Err(InterpError::NonTopLevelFnDef.into());
                 }
@@ -312,6 +317,7 @@ impl<W: Write> IntrpCtx<'_, W> {
                     name,
                     Function {
                         params,
+                        ret,
                         body: *body,
                     },
                 );
@@ -332,7 +338,7 @@ mod tests {
 
     fn assert_interp(input: &'static str, expected: Value) {
         let (mut ast, pool) = lex(input).and_then(parse).unwrap();
-        let ast = ast.pop().unwrap();
+        let last = ast.pop().unwrap();
 
         let mut ctx = IntrpCtx {
             writer: stdout().lock(),
@@ -340,7 +346,11 @@ mod tests {
             pool: &pool,
         };
 
-        let val = ctx.eval_ast(ast).unwrap();
+        for stmt in ast {
+            ctx.eval_ast(stmt).unwrap();
+        }
+
+        let val = ctx.eval_ast(last).unwrap();
 
         assert_eq!(val, expected);
     }
@@ -377,8 +387,8 @@ mod tests {
     #[test]
     fn scope_test() {
         assert_interp(
-            "let x = 10; { let x = 12; { let x = 13; x } }",
-            Value::Num(13.0),
+            "let x = 10; { let y = 12; { let z = 13; x } }",
+            Value::Num(10.0),
         );
     }
 

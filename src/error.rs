@@ -34,6 +34,10 @@ pub enum ParseError {
     Unexpected(TokenType),
     #[error("Cannot shadow variable `{0}`")]
     Shadowed(String),
+    #[error("Cannot define functions outside of the top level")]
+    FunctionNotTopLevel,
+    #[error("Name `{0}` is not a valid type (number, string, array)")]
+    InvalidType(String),
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -66,6 +70,14 @@ pub enum InterpError {
     InvalidIfTy,
     #[error("The conditional in an if expression must be `1` or `0`")]
     InvalidIfNum,
+    #[error("The value of the let is `{1}`, but doesn't match given type `{0}`")]
+    InvalidLetType(String, String),
+    #[error("If body has type `{0}` but else body has type `{1}`")]
+    IfBodyMismatch(ValTy, ValTy),
+    #[error("If expressions which return values must have an else block")]
+    IfExprWithoutElse,
+    #[error("Function return type is `{0}` but body is `{1}`")]
+    MismatchedReturnTy(ValTy, ValTy),
 }
 
 #[derive(Error, Debug, PartialEq)]

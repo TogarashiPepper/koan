@@ -165,7 +165,7 @@ impl Jit {
             }
             Ast::Block(_) => todo!(),
             Ast::LetDecl { name, ty, body } => todo!(),
-            Ast::FunDecl { name, params, body } => todo!(),
+            Ast::FunDecl { name, params, ret, body } => todo!(),
         }
 
         Ok(())
@@ -263,7 +263,12 @@ impl<'a> FunctionTranslator<'a> {
                     _ => unreachable!(),
                 }
             }
-            Expr::Ident(_) => todo!(),
+            Expr::Ident(name) => {
+                // TODO: handle error
+                let var = self.variables.get(name).unwrap();
+
+                self.builder.use_var(*var)
+            },
             Expr::StrLit(_) => todo!(),
             Expr::FunCall(_, _) => todo!(),
             Expr::Array(_) => todo!(),

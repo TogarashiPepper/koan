@@ -1,11 +1,11 @@
 use std::{
     fmt::{Display, Write},
     ops::{Add, Div, Mul, Neg, Not, Sub},
-    rc::Rc,
+    rc::Rc, str::FromStr,
 };
 
 use crate::{
-    error::{InterpError, Result},
+    error::{InterpError, KoanError, ParseError, Result},
     lexer::Operator,
 };
 
@@ -19,12 +19,26 @@ pub enum Value {
     Nothing,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ValTy {
     Number,
     String,
     Array,
     Nothing,
+}
+
+impl FromStr for ValTy {
+    type Err = KoanError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(match s {
+            "number" => Self::Number,
+            "string" => Self::String,
+            "array" => Self::Array,
+
+            _ => return Err(ParseError::InvalidType(s.to_owned()).into())
+        })
+    }
 }
 
 impl Display for ValTy {

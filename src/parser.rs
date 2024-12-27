@@ -1,7 +1,7 @@
 mod utils;
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     iter::Peekable,
 };
 
@@ -25,8 +25,52 @@ pub enum Ast {
     FunDecl {
         name: String,
         params: Vec<(String, ValTy)>,
+        ret: ValTy,
         body: Box<Ast>,
     },
+}
+
+impl Ast {
+    pub fn ast_eq(l: Ast, l_pool: &ExprPool, r: Ast, r_pool: &ExprPool) -> bool {
+        match (l, r) {
+            (Ast::Expression(l), Ast::Expression(r))
+            | (Ast::Statement(l), Ast::Statement(r)) => {
+                Expr::expr_eq(l, r, l_pool, r_pool)
+            }
+            (Ast::Block(l), Ast::Block(r)) => {
+                l.into_iter().zip(r).all(|(le, ri)| le == ri)
+            }
+            (
+                Ast::LetDecl {
+                    name: lname,
+                    ty: lty,
+                    body: lbody,
+                },
+                Ast::LetDecl { name, ty, body },
+            ) => lname == name && lty == ty && Expr::expr_eq(lbody, body, l_pool, r_pool),
+            (
+                Ast::FunDecl {
+                    name,
+                    params,
+                    ret,
+                    body,
+                },
+                Ast::FunDecl {
+                    name: rname,
+                    params: rparams,
+                    ret: rret,
+                    body: rbody,
+                },
+            ) => {
+                name == rname
+                    && params == rparams
+                    && ret == rret
+                    && Ast::ast_eq(*body, l_pool, *rbody, r_pool)
+            }
+
+            _ => false,
+        }
+    }
 }
 
 pub fn parse(tokens: Vec<Token<'_>>) -> Result<(Vec<Ast>, ExprPool)> {
@@ -51,7 +95,7 @@ pub fn parse_with_pool(tokens: Vec<Token<'_>>, pool: &mut ExprPool) -> Result<Ve
 pub struct TokenStream<'a, T: Iterator<Item = Token<'a>>> {
     pub it: Peekable<T>,
     pub pool: &'a mut ExprPool,
-    variables: HashSet<String>,
+    pub variables: HashSet<String>,
 }
 
 impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
@@ -63,7 +107,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         while let Some(p) = self.it.peek() {
             program.push(match p.variant {
                 TokenType::Let => self.let_decl()?,
-                TokenType::Fun => self.fun_def()?,
+                TokenType::Fun => {
+                    if !in_block {
+                        self.fun_def()?
+                    } else {
+                        return Err(ParseError::FunctionNotTopLevel.into());
+                    }
+                }
                 TokenType::RCurly => {
                     if !in_block {
                         return Err(ParseError::Unexpected(TokenType::RCurly).into());
@@ -105,15 +155,30 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                 (Some(TokenType::LParen), TokenType::RParen),
                 TokenType::Comma,
                 // list method already peaked b4 calling
-                |stream| stream.expect(TokenType::Ident),
+                |stream| {
+                    let ident = stream.expect(TokenType::Ident)?;
+                    let mut ty = ValTy::Number;
+                    if stream.check(TokenType::Colon) {
+                        stream.expect(TokenType::Colon)?;
+
+                        ty = stream.expect(TokenType::Ident)?.lexeme.parse()?;
+                    }
+
+                    Ok((ident.lexeme.to_owned(), ty))
+                },
             )?
             .into_iter()
-            // TODO: actually handle types rather than assuming number
-            .map(|t| (t.lexeme.to_string(), ValTy::Number))
             .collect();
+
+        dbg!(&params);
 
         for (name, _) in params.iter() {
             self.variables.insert(name.to_owned());
+        }
+
+        let mut ret_ty = ValTy::Number;
+        if self.check(TokenType::Arrow) {
+            ret_ty = self.expect(TokenType::Ident)?.lexeme.parse()?;
         }
 
         let block = self.block()?;
@@ -123,6 +188,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         Ok(Ast::FunDecl {
             name: ident.lexeme.to_owned(),
             params,
+            ret: ret_ty,
             body: Box::new(block),
         })
     }
@@ -137,6 +203,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         Ok(self.pool.push(Expr::FunCall(ident, params)))
     }
 
+    // TODO: parse let ascription type
     pub fn let_decl(&mut self) -> Result<Ast> {
         let [_, ident, _] = self.multi_expect(&[
             TokenType::Let,
@@ -149,8 +216,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
         if self.variables.contains(&ident) {
             return Err(ParseError::Shadowed(ident).into());
-        }
-        else {
+        } else {
             self.variables.insert(ident.clone());
         }
 
@@ -189,75 +255,69 @@ pub fn prefix_binding_power(op: Operator) -> ((), u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{lexer::lex, parser::Ast};
+    use crate::{lexer::lex, parser::Ast, pool::ExprPool};
 
-    fn assert_parse_expr(input: &'static str, expected: ExprRef) {
-        assert_parse(input, Ast::Expression(expected));
-    }
-
-    fn assert_parse(input: &'static str, expected: Ast) {
+    fn assert_parse<F>(input: &'static str, func: F)
+    where
+        F: FnOnce(&mut ExprPool) -> Ast,
+    {
         // For the sake of testing the parser, we'll assume the lexer is correct
-        let tokens = lex(input).unwrap();
-        let (ast, _pool) = match parse(tokens) {
-            Ok(x) => x,
-            Err(err) => {
-                panic!("error: {:?}\nbacktrace: {}", err.0, err.1);
-            }
-        };
+        let mut ex_pool = ExprPool::new();
+        let expected = func(&mut ex_pool);
 
-        assert_eq!(ast[0], expected);
+        let tokens = lex(input).unwrap();
+        let (ast, got_pool) = parse(tokens).unwrap();
+
+        assert!(Ast::ast_eq(ast[0].clone(), &got_pool, expected, &ex_pool));
     }
 
     #[test]
     fn fun_declaration() {
-        assert_parse(
-            "fun foo(p1, p2, p3) {}",
-            Ast::FunDecl {
-                name: "foo".to_owned(),
-                params: vec![
-                    ("p1".to_owned(), ValTy::Number),
-                    ("p2".to_owned(), ValTy::Number),
-                    ("p3".to_owned(), ValTy::Number),
-                ],
-                body: Box::new(Ast::Block(vec![])),
-            },
-        )
+        assert_parse("fun foo(p1, p2, p3) {}", |_| Ast::FunDecl {
+            name: "foo".to_owned(),
+            params: vec![
+                ("p1".to_owned(), ValTy::Number),
+                ("p2".to_owned(), ValTy::Number),
+                ("p3".to_owned(), ValTy::Number),
+            ],
+            ret: ValTy::Number,
+            body: Box::new(Ast::Block(vec![])),
+        })
     }
 
     #[test]
     fn fun_declaration_empty() {
-        assert_parse(
-            "fun foo() {}",
-            Ast::FunDecl {
-                name: "foo".to_owned(),
-                params: vec![],
-                body: Box::new(Ast::Block(vec![])),
-            },
-        )
+        assert_parse("fun foo() {}", |_| Ast::FunDecl {
+            name: "foo".to_owned(),
+            params: vec![],
+            ret: ValTy::Number,
+            body: Box::new(Ast::Block(vec![])),
+        })
     }
 
+    #[test]
+    fn let_declaration() {
+        assert_parse("let x = 10;", |pool| Ast::LetDecl {
+            name: "x".to_owned(),
+            ty: None,
+            body: pool.push(Expr::NumLit(10.0)),
+        });
+    }
 
-    // TODO:
-    // #[test]
-    // fn let_declaration() {
-    //     assert_parse(
-    //         "let x = 10;",
-    //         Ast::LetDecl("x".to_string(), Expr::NumLit(10.0)),
-    //     );
-    // }
-    //
-    // #[test]
-    // fn let_decl_then_expr() {
-    //     assert_parse(
-    //         "let x = 1 + 2;",
-    //         Ast::LetDecl(
-    //             "x".to_string(),
-    //             Expr::BinOp {
-    //                 lhs: Box::new(Expr::NumLit(1.0)),
-    //                 op: Operator::Plus,
-    //                 rhs: Box::new(Expr::NumLit(2.0)),
-    //             },
-    //         ),
-    //     )
-    // }
+    #[test]
+    fn let_decl_then_expr() {
+        assert_parse("let x = 1 + 2;", |pool| {
+            let lhs = pool.push(Expr::NumLit(1.0));
+            let rhs = pool.push(Expr::NumLit(2.0));
+            Ast::LetDecl {
+                    name: "x".to_owned(),
+                    ty: None,
+                    body: pool.push(Expr::BinOp {
+                        lhs,
+                        op: Operator::Plus,
+                        rhs,
+                    }),
+                }
+        })
+    }
 }

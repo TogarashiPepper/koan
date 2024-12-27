@@ -47,6 +47,8 @@ pub enum TokenType {
     Pipe,
     If,
     Else,
+    Colon,
+    Arrow,
 }
 
 impl Operator {
@@ -203,7 +205,6 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
             '≥' => builder.variant(Op(GreaterEqual)),
             '^' => builder.variant(Op(Power)),
             '+' => builder.variant(Op(Plus)),
-            '-' => builder.variant(Op(Minus)),
             '*' => builder.variant(Op(Times)),
             '/' => builder.variant(Op(Slash)),
             '(' => builder.variant(LParen),
@@ -214,6 +215,8 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
             '}' => builder.variant(RCurly),
             '[' => builder.variant(LBracket),
             ']' => builder.variant(RBracket),
+            ':' => builder.variant(Colon),
+            '-' => builder.variant_pair(&mut it, ('-', '>'), (Some(Op(Minus)), Arrow))?,
             '|' => {
                 builder.variant_pair(&mut it, ('|', '|'), (Some(Pipe), Op(DoublePipe)))?
             }
