@@ -18,6 +18,17 @@ pub struct StateSim {
 }
 
 impl StateSim {
+    fn new() -> Self {
+        let mut global = HashMap::new();
+        global.insert("π".to_owned(), ValTy::Number);
+        global.insert("e".to_owned(), ValTy::Number);
+
+        StateSim {
+            variables: vec![global],
+            functions: HashMap::new(),
+        }
+    }
+
     fn get(&self, k: &str) -> Option<ValTy> {
         for scope in self.variables.iter().rev() {
             if let Some(x) = scope.get(k).copied() {
@@ -93,14 +104,7 @@ pub fn infer(ast: &Ast, pool: &ExprPool, state_sim: &mut StateSim) -> Result<Val
 }
 
 pub fn annotate(ast: Ast, pool: &ExprPool) -> Result<Ast> {
-    let mut global = HashMap::new();
-    global.insert("π".to_owned(), ValTy::Number);
-    global.insert("e".to_owned(), ValTy::Number);
-
-    let mut state_sim = StateSim {
-        variables: vec![global],
-        functions: HashMap::new(),
-    };
+    let mut state_sim = StateSim::new();
 
     annotate_inner(ast, pool, &mut state_sim)
 }
@@ -149,7 +153,11 @@ fn annotate_inner(ast: Ast, pool: &ExprPool, sim: &mut StateSim) -> Result<Ast> 
 /// identifier and infers the type of the value held by that idenftifier. This parameter is used to
 /// allow the inference for the AST to provide the `Expr` the information it needs without
 /// providing it the entire scope tree every time.
-pub fn infer_exp(expr: ExprRef, pool: &ExprPool, state_sim: &mut StateSim) -> Result<ValTy> {
+pub fn infer_exp(
+    expr: ExprRef,
+    pool: &ExprPool,
+    state_sim: &mut StateSim,
+) -> Result<ValTy> {
     use ValTy::{Array, Number, String};
 
     let exp = pool.get(expr);
@@ -167,6 +175,16 @@ pub fn infer_exp(expr: ExprRef, pool: &ExprPool, state_sim: &mut StateSim) -> Re
                     (l, r) => {
                         return Err(
                             InterpError::MismatchedTypes(Operator::Power, l, r).into()
+                        )
+                    }
+                },
+                Operator::Slash => match (lhs, rhs) {
+                    (Array, Array) | (Number, Array) | (Array, Number) => Array,
+                    (Number, Number) => Number,
+
+                    (l, r) => {
+                        return Err(
+                            InterpError::MismatchedTypes(Operator::Slash, l, r).into()
                         )
                     }
                 },
@@ -202,8 +220,7 @@ pub fn infer_exp(expr: ExprRef, pool: &ExprPool, state_sim: &mut StateSim) -> Re
                         )
                     }
                 },
-                Operator::Slash
-                | Operator::DoubleEqual
+                Operator::DoubleEqual
                 | Operator::Greater
                 | Operator::GreaterEqual
                 | Operator::Lesser
@@ -232,9 +249,11 @@ pub fn infer_exp(expr: ExprRef, pool: &ExprPool, state_sim: &mut StateSim) -> Re
             .ok_or_else(|| KoanError::from(InterpError::UndefVar(name.to_owned())))?,
 
         Expr::FunCall(name, params) => {
-            let func = state_sim.functions.get(name).ok_or_else(|| {
-                KoanError::from(InterpError::UndefFunc(name.to_owned()))
-            })?.clone();
+            let func = state_sim
+                .functions
+                .get(name)
+                .ok_or_else(|| KoanError::from(InterpError::UndefFunc(name.to_owned())))?
+                .clone();
 
             // Ensure params are typed correctly
             for (given, expected) in params.iter().zip(func.0.iter()) {
@@ -270,12 +289,56 @@ pub fn infer_exp(expr: ExprRef, pool: &ExprPool, state_sim: &mut StateSim) -> Re
                 if body_ty != else_ty {
                     return Err(InterpError::IfBodyMismatch(body_ty, else_ty).into());
                 }
-            }
-            else if body_ty != ValTy::Nothing {
+            } else if body_ty != ValTy::Nothing {
                 return Err(InterpError::IfExprWithoutElse.into());
             }
 
             body_ty
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        lexer::lex,
+        parser::{parse, Ast}, value::ValTy,
+    };
+
+    use super::{infer_exp, StateSim};
+
+    fn test_infer_exp(input: String, expected: ValTy) {
+        let (ast, pool) = lex(input.as_str()).and_then(parse).unwrap();
+        let mut state_sim = StateSim::new();
+
+        if let Ast::Expression(expr) = ast[0] {
+            let ty = infer_exp(expr, &pool, &mut state_sim).unwrap();
+
+            assert_eq!(ty, expected);
+        } else {
+            panic!()
+        }
+    }
+
+    #[test]
+    fn array_binop() {
+        for sym in ["+", "-", "^", "*", "/"] {
+            test_infer_exp(format!("2 {sym} [1, 2, 3]"), ValTy::Array);
+            test_infer_exp(format!("[1, 2, 3] {sym} 2"), ValTy::Array);
+            test_infer_exp(format!("[] {sym} 2"), ValTy::Array);
+            test_infer_exp(format!("[] {sym} []"), ValTy::Array);
+        }
+    }
+
+    #[test]
+    fn array_unop() {
+        for sym in ["-", "○", "√"] {
+            test_infer_exp(format!("{sym} [1, 2, 3]"), ValTy::Array);
+        }
+    }
+
+    #[test]
+    fn scalar_binop() {
+        todo!();
+    }
 }
