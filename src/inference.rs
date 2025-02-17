@@ -75,8 +75,20 @@ pub fn infer(ast: &Ast, pool: &ExprPool, state_sim: &mut StateSim) -> Result<Val
 
             res
         }
-        Ast::LetDecl { name, ty: _, body } => {
+        Ast::LetDecl { name, ty, body } => {
             let inferred = infer_exp(*body, pool, state_sim)?;
+
+            // TODO: could benefit from feature `if-let-chains`
+            if let Some(ty) = ty {
+                if *ty != inferred {
+                    return Err(InterpError::InvalidLetType(
+                        ty.to_string(),
+                        inferred.to_string(),
+                    )
+                    .into());
+                }
+            }
+
             state_sim.set(name.to_owned(), inferred);
 
             Ok(inferred)
@@ -302,7 +314,8 @@ pub fn infer_exp(
 mod tests {
     use crate::{
         lexer::lex,
-        parser::{parse, Ast}, value::ValTy,
+        parser::{parse, Ast},
+        value::ValTy,
     };
 
     use super::{infer_exp, StateSim};
@@ -339,6 +352,8 @@ mod tests {
 
     #[test]
     fn scalar_binop() {
-        todo!();
+        for sym in ["+", "-", "^", "*", "/"] {
+            test_infer_exp(format!("2 {sym} 1"), ValTy::Number);
+        }
     }
 }

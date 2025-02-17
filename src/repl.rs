@@ -15,8 +15,8 @@ use syntect::{
 };
 
 use crate::{
-    error::Result, interpreter::IntrpCtx, lexer::lex, parser::parse_with_pool,
-    pool::ExprPool, state::State, value::Value,
+    error::Result, interpreter::IntrpCtx, lexer::lex, parser::{parse_with_pool, Ast},
+    pool::ExprPool, state::State, value::Value, vm::VM,
 };
 
 #[derive(Helper, Completer, Hinter, Validator)]
@@ -107,17 +107,26 @@ pub fn repl() -> Result<()> {
                 let stdout = stdout().lock();
 
                 let ast = lex(&line).and_then(|tks| parse_with_pool(tks, &mut pool))?;
-                let mut ctx = IntrpCtx {
-                    writer: stdout,
-                    state: &mut state,
-                    pool: &pool,
-                };
+                // let mut ctx = IntrpCtx {
+                //     writer: stdout,
+                //     state: &mut state,
+                //     pool: &pool,
+                // };
 
                 for statement in ast {
-                    let r = ctx.eval_ast(statement)?;
-                    if r != Value::Nothing {
-                        println!("{}", r);
+                    if let Ast::Expression(e) = statement {
+                        let mut vm = VM::new();
+                        vm.compile_expr(e, &pool)?;
+                        println!("{}", vm.calc_stack_effect());
+
+                        vm.run()?;
+
+                        println!("{}", vm.stack.pop().unwrap());
                     }
+                    // let r = ctx.eval_ast(statement)?;
+                    // if r != Value::Nothing {
+                    //     println!("{}", r);
+                    // }
                 }
             }
             Err(ReadlineError::Interrupted) => {

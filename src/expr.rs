@@ -180,6 +180,25 @@ mod tests {
     }
 
     #[test]
+    fn string() {
+        assert_expr(r#""Hello""#, |pool| pool.push(Expr::StrLit("Hello".into())));
+    }
+
+    #[test]
+    fn ident() {
+        assert_expr("2x", |pool| {
+            let lhs = pool.push(Expr::NumLit(2.0));
+            let rhs = pool.push(Expr::Ident("x".into()));
+
+            pool.push(Expr::BinOp {
+                lhs,
+                op: Operator::Times,
+                rhs,
+            })
+        });
+    }
+
+    #[test]
     fn simple_preop() {
         use Expr::*;
 
@@ -189,6 +208,37 @@ mod tests {
             pool.push(PreOp {
                 op: Operator::PiTimes,
                 rhs,
+            })
+        })
+    }
+
+    #[test]
+    fn ifelse() {
+        use crate::parser::Ast;
+
+        assert_expr("if 0 {} else {}", |pool| {
+            let num = pool.push(Expr::NumLit(0.0));
+
+            pool.push(Expr::IfElse {
+                cond: num,
+                body: Ast::Block(vec![]),
+                else_body: Some(Ast::Block(vec![])),
+            })
+        });
+    }
+
+    #[test]
+    fn abs() {
+        assert_expr("|-1|", |pool| {
+            let rhs = pool.push(Expr::NumLit(1.0));
+            let minus = pool.push(Expr::PreOp {
+                op: Operator::Minus,
+                rhs,
+            });
+
+            pool.push(Expr::PreOp {
+                op: Operator::Abs,
+                rhs: minus,
             })
         })
     }

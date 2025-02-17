@@ -170,8 +170,6 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
             .into_iter()
             .collect();
 
-        dbg!(&params);
-
         for (name, _) in params.iter() {
             self.variables.insert(name.to_owned());
         }

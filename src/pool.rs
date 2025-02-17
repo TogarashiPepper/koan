@@ -26,7 +26,12 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn expr_eq(lhs: ExprRef, rhs: ExprRef, l_pool: &ExprPool, r_pool: &ExprPool) -> bool {
+    pub fn expr_eq(
+        lhs: ExprRef,
+        rhs: ExprRef,
+        l_pool: &ExprPool,
+        r_pool: &ExprPool,
+    ) -> bool {
         let lhs = l_pool.get(lhs);
         let rhs = r_pool.get(rhs);
 
@@ -69,6 +74,18 @@ impl Expr {
 
                 larr.len() == rarr.len() && it
             }
+            (
+                Expr::IfElse {
+                    cond,
+                    body,
+                    else_body,
+                },
+                Expr::IfElse {
+                    cond: rcond,
+                    body: rbody,
+                    else_body: relse_body,
+                },
+            ) => cond == rcond && body == rbody && else_body == relse_body,
 
             _ => false,
         }

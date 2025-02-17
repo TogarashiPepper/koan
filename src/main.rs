@@ -1,7 +1,7 @@
-use std::{io::stdout, path::PathBuf};
+use std::{io::stdout, path::PathBuf, process::exit};
 
 use koan::{
-    error::{CliError, KoanError, Result},
+    error::{handle_err, CliError, KoanError, Result},
     interpreter::IntrpCtx,
     lexer::lex,
     parser::parse,
@@ -12,33 +12,23 @@ use koan::{
 use koan::repl::repl;
 
 fn main() {
-    // let mut jit = Jit::default();
-    // let code = jit.compile("0 || 1").unwrap();
-    // let func = unsafe { std::mem::transmute::<*const u8, fn() -> f64>(code) };
+    let mut arg_it = std::env::args();
+    arg_it.next();
+    let arg = arg_it.next().unwrap_or_else(|| "repl".to_owned());
 
-    println!(
-        "{:#?}",
-        parse(lex("fun foo(x: string) -> array {}").unwrap()).unwrap()
-        // lex("1 - 2").unwrap()
-    );
-
-    // let mut arg_it = std::env::args();
-    // arg_it.next();
-    // let arg = arg_it.next().unwrap_or_else(|| "repl".to_owned());
-    //
-    // if arg == "repl" {
-    //     #[cfg(feature = "repl")]
-    //     if let Err(err) = repl() {
-    //         eprintln!("{}", handle_err(err));
-    //         exit(1);
-    //     }
-    // } else {
-    //     let path: PathBuf = arg.into();
-    //     if let Err(err) = run_file(path) {
-    //         eprintln!("{}", handle_err(err));
-    //         exit(1);
-    //     }
-    // }
+    if arg == "repl" {
+        #[cfg(feature = "repl")]
+        if let Err(err) = repl() {
+            eprintln!("{}", handle_err(err));
+            exit(1);
+        }
+    } else {
+        let path: PathBuf = arg.into();
+        if let Err(err) = run_file(path) {
+            eprintln!("{}", handle_err(err));
+            exit(1);
+        }
+    }
 }
 
 fn run_file(path: PathBuf) -> Result<()> {

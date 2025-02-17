@@ -1,7 +1,7 @@
 use std::{
-    iter::{Map, Peekable},
+    iter::Peekable,
     ops::Range,
-    str::{CharIndices, Chars},
+    str::CharIndices,
 };
 
 use crate::error::{LexError, Result};
@@ -343,18 +343,12 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::error::KoanError;
-
     use super::{
         lex, LexError,
         Operator::*,
         Token,
         TokenType::{self, *},
     };
-
-    fn ok(t: Token<'_>) -> Result<Vec<Token<'_>>, KoanError> {
-        Ok(vec![t])
-    }
 
     fn lex_single(input: &'static str, expected: TokenType) {
         let Ok(got) = lex(input) else {
@@ -487,12 +481,36 @@ mod tests {
     fn lex_greater_and_greater_equal() {
         lex_single(">", Op(Greater));
         lex_single(">=", Op(GreaterEqual));
+        lex_single("≥", Op(GreaterEqual));
     }
 
     #[test]
     fn lex_lesser_and_lesser_equal() {
         lex_single("<", Op(Lesser));
         lex_single("<=", Op(LesserEqual));
+        lex_single("≤", Op(LesserEqual));
+    }
+
+    #[test]
+    fn lex_colon() {
+        lex_single(":", Colon);
+    }
+
+    #[test]
+    fn lex_logical_and() {
+        lex_single("||", Op(DoublePipe));
+    }
+
+    #[test]
+    fn lex_unicode_times() {
+        lex_single("×", Op(Times));
+    }
+
+    #[test]
+    fn lex_neq() {
+        lex_single("!=", Op(NotEqual));
+        lex_single("≠", Op(NotEqual));
+
     }
 
     #[test]
@@ -502,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn lex_double_then_plus() {
+    fn lex_double_then_plu() {
         let got = lex("==+");
         assert_eq!(
             got,
@@ -558,18 +576,27 @@ mod tests {
 
     #[test]
     fn lex_string() {
-        let input = r#""Hello, World""#;
+        let input: &'static str = r#""Hello World""#;
         let expected = TokenType::String;
-        let got = lex(input);
+        let got = lex(input).unwrap();
+        assert_eq!(got.len(), 1);
 
         assert_eq!(
-            got,
-            ok(Token {
+            got[0],
+            Token {
                 variant: expected,
-                location: 1..13,
-                lexeme: dbg!(&input[1..13])
-            })
+                location: 1..input.len() - 1,
+                lexeme: "Hello World"
+            }
         );
+    }
+
+    #[test]
+    #[should_panic]
+    fn lex_string_error() {
+        let input: &'static str = r#""Hello World"#;
+
+        lex(input).unwrap();
     }
 
     #[test]
@@ -588,8 +615,21 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn lex_number_error() {
+        lex_single("0.", Number);
+    }
+
+    #[test]
     fn lex_invalid_token() {
         let got = lex("~");
         assert_eq!(got, Err(LexError::InvalidToken("~".to_owned()).into()));
+    }
+
+    #[test]
+    fn lex_invalid_double_token() {
+        let got = lex("&");
+
+        assert_eq!(got, Err(LexError::PartialMultiCharToken('&', '&').into()));
     }
 }

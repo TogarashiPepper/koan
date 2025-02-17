@@ -1,4 +1,3 @@
-pub mod compiler;
 pub mod error;
 pub mod expr;
 pub mod inference;
@@ -11,3 +10,4 @@ pub mod repl;
 pub mod state;
 pub mod value;
 pub mod vm;
+pub mod compiler;

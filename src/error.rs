@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::{
     lexer::{Operator, TokenType},
-    value::ValTy,
+    value::ValTy, vm::OpCode,
 };
 
 pub type Result<T> = std::result::Result<T, KoanError>;
@@ -96,6 +96,8 @@ pub enum VmError {
     StackEmpty,
     #[error("The program counter was out of bounds")]
     PcOutOfBounds,
+    #[error("Operation `{0:?} missing it's parameter(s)`")]
+    MissingParameter(OpCode),
 }
 
 #[derive(Debug, PartialEq)]
