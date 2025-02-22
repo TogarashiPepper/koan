@@ -34,7 +34,7 @@ impl VM {
                     | Operator::PiTimes
                     | Operator::Sqrt => panic!("invalid binop"),
 
-                    _ => panic!("= is not a valid bin op yet"),
+                    Operator::Equal => panic!("= is not a valid bin op yet"),
                 } as u8);
             }
             Expr::PreOp { op, rhs } => {
@@ -86,18 +86,26 @@ impl VM {
 
     pub fn compile(&mut self, ast: Ast, pool: &ExprPool) -> Result<()> {
         match ast {
-            Ast::Expression(e) => self.compile_expr(e, pool)?, 
+            Ast::Expression(e) => self.compile_expr(e, pool)?,
             // TODO: pop off stack to discord? pop stack effect many elems?
-            Ast::Statement(s) => self.compile_expr(s, pool)?,
+            Ast::Statement(s) => {
+                self.compile_expr(s, pool)?;
+                self.chunk.push(OpCode::Discard as u8);
+            },
             Ast::Block(stmts) => {
                 // TODO: handle scoping, pop-ing values off stack etc
 
                 for stmt in stmts {
                     self.compile(stmt, pool)?;
                 }
-            },
+            }
             Ast::LetDecl { name, ty, body } => todo!(),
-            Ast::FunDecl { name, params, ret, body } => todo!(),
+            Ast::FunDecl {
+                name,
+                params,
+                ret,
+                body,
+            } => todo!(),
         }
 
         Ok(())

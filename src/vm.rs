@@ -4,7 +4,11 @@ use crate::{
     value::Value,
 };
 
-use std::ops::{Add, Div, Mul, Neg, Not, Sub};
+use std::{
+    collections::HashMap,
+    f64::consts::PI,
+    ops::{Add, Div, Mul, Neg, Not, Sub},
+};
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq)]
@@ -17,7 +21,6 @@ pub enum OpCode {
     Pow,
     Floor,
     Abs,
-    Load,
     Print,
     Eq,
     Neq,
@@ -29,6 +32,10 @@ pub enum OpCode {
     And,
     Not,
     PiTimes,
+    /// pops a value off the stack
+    Discard,
+    Load,
+    DefineGlobal,
 }
 
 impl TryFrom<u8> for OpCode {
@@ -53,6 +60,7 @@ pub struct VM {
     pub data: Vec<Value>,
     pub pc: usize,
     pub stack: Vec<Value>,
+    pub globals: HashMap<String, Value>,
 }
 
 impl VM {
@@ -62,6 +70,7 @@ impl VM {
             data: vec![],
             pc: 0,
             stack: vec![],
+            globals: HashMap::new(),
         }
     }
 
@@ -88,7 +97,9 @@ impl VM {
                 | OpCode::Lesser
                 | OpCode::LesserEq
                 | OpCode::Or
-                | OpCode::And => -1,
+                | OpCode::And
+                | OpCode::Discard
+                | OpCode::DefineGlobal => -1,
                 OpCode::Not
                 | OpCode::Sqrt
                 | OpCode::Floor
@@ -165,8 +176,29 @@ impl VM {
                         }
                     }
                 }
+                OpCode::Discard => {
+                    self.stack.pop();
+                }
+                OpCode::PiTimes => self.un_op(|l| l * Value::Num(PI))?,
+                OpCode::DefineGlobal => {
+                    let idx =
+                        self.read_byte().ok_or(VmError::MissingParameter(op_code))?;
+
+                    let Value::UTF8(name) = self.data[idx as usize].clone() else {
+                        panic!("DefineGlobal data idx wasn't a str value");
+                    };
+
+                    let val = self.stack.pop().ok_or(VmError::StackEmpty)?;
+
+                    #[allow(clippy::map_entry)]
+                    // Clippy suggestion forces us to move name, which makes the else case fail
+                    if self.globals.contains_key(&name) {
+                        self.globals.insert(name, val);
+                    } else {
+                        return Err(VmError::GlobalAlreadyDefined(name).into());
+                    }
+                }
                 OpCode::Not => todo!(),
-                OpCode::PiTimes => todo!(),
             }
         }
 
@@ -203,10 +235,10 @@ impl VM {
 
     fn un_op<F>(&mut self, op: F) -> Result<()>
     where
-        F: FnOnce(&Value) -> Result<Value>,
+        F: FnOnce(Value) -> Result<Value>,
     {
         let a = self.pop()?;
-        let res = op(&a)?;
+        let res = op(a)?;
 
         self.push(res);
 

@@ -98,6 +98,8 @@ pub enum VmError {
     PcOutOfBounds,
     #[error("Operation `{0:?} missing it's parameter(s)`")]
     MissingParameter(OpCode),
+    #[error("Global `{0} is already defined`")]
+    GlobalAlreadyDefined(String),
 }
 
 #[derive(Debug, PartialEq)]

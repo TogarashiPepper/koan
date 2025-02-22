@@ -121,7 +121,7 @@ impl Value {
         }
     }
 
-    pub fn sqrt(&self) -> Result<Self> {
+    pub fn sqrt(self) -> Result<Self> {
         match self {
             Value::Num(n) => Ok(Value::Num(n.sqrt())),
             a @ Value::Array(_) => a.map(|x| x.sqrt()),
@@ -146,7 +146,7 @@ impl Value {
         }
     }
 
-    pub fn abs(&self) -> Result<Self> {
+    pub fn abs(self) -> Result<Self> {
         match self {
             Value::Num(n) => Ok(Value::Num(n.abs())),
             a @ Value::Array(_) => a.map(|x| x.abs()),
