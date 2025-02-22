@@ -1,5 +1,6 @@
 use crate::{
-    error::{KoanError, Result, VmError},
+    error::{InterpError, KoanError, Result, VmError},
+    lexer::Operator,
     value::Value,
 };
 
@@ -142,8 +143,28 @@ impl VM {
                 OpCode::LesserEq => {
                     self.bin_op(|l, r| Ok(Value::Num(f64::from(l <= r))))?
                 }
-                OpCode::Or => todo!(),
-                OpCode::And => todo!(),
+                OpCode::Or | OpCode::And => {
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+
+                    match (&b, &a) {
+                        (Value::Num(l), Value::Num(r)) => {
+                            todo!()
+                        }
+                        _ => {
+                            return Err(InterpError::MismatchedTypes(
+                                if op_code == OpCode::Or {
+                                    Operator::DoublePipe
+                                } else {
+                                    Operator::DoubleAnd
+                                },
+                                a.ty_str(),
+                                b.ty_str(),
+                            )
+                            .into())
+                        }
+                    }
+                }
                 OpCode::Not => todo!(),
                 OpCode::PiTimes => todo!(),
             }
