@@ -42,7 +42,7 @@ impl TryFrom<u8> for OpCode {
     type Error = KoanError;
 
     fn try_from(value: u8) -> Result<Self> {
-        if value < 20 {
+        if value < 22 {
             unsafe {
                 // SAFETY: OpCode only has 20 elements so we ensure `value` is in the 0..9 range
                 Ok(std::mem::transmute::<u8, OpCode>(value))
@@ -263,8 +263,7 @@ mod tests {
         let mut vm = VM {
             chunk: vec![OpCode::Load as u8, 0],
             data: vec![Value::Num(42.0)],
-            pc: 0,
-            stack: vec![],
+            ..Default::default()
         };
 
         vm.run().unwrap();
