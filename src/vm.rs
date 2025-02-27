@@ -7,7 +7,7 @@ use crate::{
 use std::{
     collections::HashMap,
     f64::consts::PI,
-    ops::{Add, Div, Mul, Neg, Not, Sub},
+    ops::{Add, Div, Mul, Sub},
 };
 
 #[repr(u8)]
@@ -36,13 +36,14 @@ pub enum OpCode {
     Discard,
     Load,
     DefineGlobal,
+    GetGlobal,
 }
 
 impl TryFrom<u8> for OpCode {
     type Error = KoanError;
 
     fn try_from(value: u8) -> Result<Self> {
-        if value < 22 {
+        if value < 23 {
             unsafe {
                 // SAFETY: OpCode only has 20 elements so we ensure `value` is in the 0..9 range
                 Ok(std::mem::transmute::<u8, OpCode>(value))
@@ -98,17 +99,20 @@ impl VM {
                 | OpCode::LesserEq
                 | OpCode::Or
                 | OpCode::And
-                | OpCode::Discard
-                | OpCode::DefineGlobal => -1,
+                | OpCode::Discard => -1,
                 OpCode::Not
                 | OpCode::Sqrt
                 | OpCode::Floor
                 | OpCode::Print
                 | OpCode::PiTimes
                 | OpCode::Abs => 0,
-                OpCode::Load => {
+                OpCode::Load | OpCode::GetGlobal => {
                     skip = true;
                     1
+                }
+                OpCode::DefineGlobal => {
+                    skip = true;
+                    -1
                 }
             }
         }
@@ -197,6 +201,23 @@ impl VM {
                     } else {
                         return Err(VmError::GlobalAlreadyDefined(name).into());
                     }
+                }
+                OpCode::GetGlobal => {
+                    let idx =
+                        self.read_byte().ok_or(VmError::MissingParameter(op_code))?;
+
+                    let Value::UTF8(name) = &self.data[idx as usize] else {
+                        panic!("DefineGlobal data idx wasn't a str value");
+                    };
+
+                    let val = self
+                        .globals
+                        .get(name)
+                        .cloned()
+                        // TODO: merge interp and vm errors(?)
+                        .ok_or_else(|| InterpError::UndefVar(name.to_owned()))?;
+
+                    self.stack.push(val);
                 }
                 OpCode::Not => todo!(),
             }
