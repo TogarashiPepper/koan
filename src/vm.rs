@@ -207,7 +207,7 @@ impl VM {
                         self.read_byte().ok_or(VmError::MissingParameter(op_code))?;
 
                     let Value::UTF8(name) = &self.data[idx as usize] else {
-                        panic!("DefineGlobal data idx wasn't a str value");
+                        panic!("GetGlobal data idx wasn't a str value");
                     };
 
                     let val = self
