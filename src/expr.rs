@@ -49,6 +49,10 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
                     })
                 }
                 TokenType::Op(op) => {
+                    if !op.is_pre_op() {
+                        return Err(ParseError::InvalidPreOp(op).into());
+                    }
+
                     let ((), r_bp) = parser::prefix_binding_power(op);
                     let rhs = self.expr_bp(r_bp)?;
 

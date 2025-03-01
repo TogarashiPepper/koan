@@ -29,6 +29,8 @@ pub enum ParseError {
     ExpectedFound(TokenType, TokenType),
     #[error("Unexpected `{0:?}` token found")]
     Unexpected(TokenType),
+    #[error("`{0:?}` is not a valid prefix operator")]
+    InvalidPreOp(Operator),
 }
 
 #[derive(Error, Debug, PartialEq)]
