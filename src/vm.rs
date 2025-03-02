@@ -45,7 +45,7 @@ impl TryFrom<u8> for OpCode {
     fn try_from(value: u8) -> Result<Self> {
         if value < 23 {
             unsafe {
-                // SAFETY: OpCode only has 20 elements so we ensure `value` is in the 0..9 range
+                // SAFETY: OpCode only has 23 elements so we ensure `value` is in the 0..9 range
                 Ok(std::mem::transmute::<u8, OpCode>(value))
             }
         } else {
