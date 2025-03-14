@@ -15,8 +15,15 @@ use syntect::{
 };
 
 use crate::{
-    error::Result, interpreter::IntrpCtx, lexer::lex, parser::{parse_with_pool, Ast},
-    pool::ExprPool, state::State, value::Value, vm::VM,
+    compiler::Compiler,
+    error::Result,
+    interpreter::IntrpCtx,
+    lexer::lex,
+    parser::{parse_with_pool, Ast},
+    pool::ExprPool,
+    state::State,
+    value::Value,
+    vm::VM,
 };
 
 #[derive(Helper, Completer, Hinter, Validator)]
@@ -115,8 +122,10 @@ pub fn repl() -> Result<()> {
 
                 for statement in ast {
                     if let Ast::Expression(e) = statement {
-                        let mut vm = VM::new();
-                        vm.compile_expr(e, &pool)?;
+                        let mut compiler = Compiler::default();
+                        compiler.compile_expr(e, &pool)?;
+
+                        let mut vm = compiler.finish();
                         println!("{}", vm.calc_stack_effect());
 
                         vm.run()?;

@@ -1,4 +1,2 @@
-# Uncomment following lines if rustc isn't taking full advantage of your processor
-# Commented by default for CI purposes
-# [build]
-# rustflags = ["-C", "target-cpu=native"]
+[build]
+rustflags = ["-C", "target-cpu=native"]

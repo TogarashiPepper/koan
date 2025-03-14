@@ -3,7 +3,6 @@ use koan::{interpreter::IntrpCtx, lexer::lex, parser::parse, state::State};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let toks = lex(include_str!("../foo.koan")).unwrap();
-    let ast = parse(toks.clone()).unwrap();
 
     c.bench_function("ast", |b| {
         b.iter_batched(
@@ -15,7 +14,12 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("tree-walk interpreter", |b| {
         b.iter_batched(
-            || (ast.clone(), State::new()),
+            || {
+                (
+                    lex(include_str!("../fib.koan")).and_then(parse).unwrap(),
+                    State::new(),
+                )
+            },
             |(ast, mut state)| {
                 let mut ctx = IntrpCtx {
                     writer: vec![],

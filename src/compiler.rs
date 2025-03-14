@@ -7,14 +7,30 @@ use crate::{
     vm::{OpCode, VM},
 };
 
-impl VM {
+pub struct Local {
+    name: String,
+    depth: u32,
+}
+
+#[derive(Default)]
+pub struct Compiler {
+    vm: VM,
+    locals: Vec<Local>,
+    scope_depth: u32,
+}
+
+impl Compiler {
+    pub fn finish(self) -> VM {
+        self.vm
+    }
+
     pub fn compile_expr(&mut self, eref: ExprRef, pool: &ExprPool) -> Result<()> {
         match pool.get(eref) {
             Expr::BinOp { lhs, op, rhs } => {
                 self.compile_expr(*lhs, pool)?;
                 self.compile_expr(*rhs, pool)?;
 
-                self.chunk.push(match op {
+                self.vm.chunk.push(match op {
                     Operator::Power => OpCode::Pow,
                     Operator::Plus => OpCode::Add,
                     Operator::Minus => OpCode::Sub,
@@ -40,7 +56,7 @@ impl VM {
             Expr::PreOp { op, rhs } => {
                 self.compile_expr(*rhs, pool)?;
 
-                self.chunk.push(match op {
+                self.vm.chunk.push(match op {
                     Operator::Not => OpCode::Not,
                     Operator::Abs => OpCode::Abs,
                     Operator::PiTimes => OpCode::PiTimes,
@@ -51,24 +67,26 @@ impl VM {
             }
             Expr::NumLit(lit) => {
                 let pos = self
+                    .vm
                     .data
                     .iter()
                     .position(|e| e == &Value::Num(*lit))
                     .unwrap_or_else(|| {
-                        self.data.push(Value::Num(*lit));
-                        self.data.len() - 1
+                        self.vm.data.push(Value::Num(*lit));
+                        self.vm.data.len() - 1
                     });
 
                 // TODO: check pos < u8::MAX
-                self.chunk
+                self.vm
+                    .chunk
                     .extend_from_slice(&[OpCode::Load as u8, pos as u8]);
             }
             Expr::StrLit(lit) => {
-                self.data.push(Value::UTF8(lit.to_owned()));
+                self.vm.data.push(Value::UTF8(lit.to_owned()));
 
-                self.chunk.extend_from_slice(&[
+                self.vm.chunk.extend_from_slice(&[
                     OpCode::Load as u8,
-                    (self.data.len() - 1) as u8,
+                    (self.vm.data.len() - 1) as u8,
                 ]);
             }
             Expr::Ident(_) => todo!(),
@@ -90,16 +108,33 @@ impl VM {
             // TODO: pop off stack to discord? pop stack effect many elems?
             Ast::Statement(s) => {
                 self.compile_expr(s, pool)?;
-                self.chunk.push(OpCode::Discard as u8);
-            },
+                self.vm.chunk.push(OpCode::Discard as u8);
+            }
             Ast::Block(stmts) => {
                 // TODO: handle scoping, pop-ing values off stack etc
+                self.scope_depth += 1;
 
                 for stmt in stmts {
-                    self.compile(stmt, pool)?;
+                    self.compile(stmt,pool)?;
                 }
+
+                self.scope_depth -= 1;
             }
-            Ast::LetDecl { name, ty, body } => todo!(),
+            Ast::LetDecl { name, ty: _, body } => {
+                if self.scope_depth > 0 {
+                    // TODO: error if shadowed
+                    self.locals.push(Local { name, depth: self.scope_depth});
+                }
+                else {
+                    self.compile_expr(body, pool)?;
+                    self.vm.data.push(Value::UTF8(name));
+
+                    self.vm.chunk.extend_from_slice(&[
+                        OpCode::DefineGlobal as u8,
+                        self.vm.data.len() as u8 - 1,
+                    ]);
+                }
+            },
             Ast::FunDecl {
                 name,
                 params,
