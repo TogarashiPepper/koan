@@ -89,7 +89,7 @@ impl Compiler {
                     (self.vm.data.len() - 1) as u8,
                 ]);
             }
-            Expr::Ident(_) => todo!(),
+            Expr::Ident(name) => todo!(),
             Expr::FunCall(_, _) => todo!(),
             Expr::Array(_) => todo!(),
             Expr::IfElse {
@@ -110,22 +110,38 @@ impl Compiler {
                 self.compile_expr(s, pool)?;
                 self.vm.chunk.push(OpCode::Discard as u8);
             }
-            Ast::Block(stmts) => {
+            Ast::Block(mut stmts) => {
                 // TODO: handle scoping, pop-ing values off stack etc
                 self.scope_depth += 1;
 
+                let Some(last) = stmts.pop() else {
+                    return Ok(());
+                };
+
                 for stmt in stmts {
-                    self.compile(stmt,pool)?;
+                    self.compile(stmt, pool)?;
                 }
 
                 self.scope_depth -= 1;
+
+                for idx in (0..self.locals.len()).rev() {
+                    if self.locals[idx].depth <= self.scope_depth {
+                        break;
+                    }
+
+                    self.vm.chunk.push(OpCode::Discard as u8);
+                }
+
+                self.compile(last, pool)?;
             }
             Ast::LetDecl { name, ty: _, body } => {
                 if self.scope_depth > 0 {
                     // TODO: error if shadowed
-                    self.locals.push(Local { name, depth: self.scope_depth});
-                }
-                else {
+                    self.locals.push(Local {
+                        name,
+                        depth: self.scope_depth,
+                    });
+                } else {
                     self.compile_expr(body, pool)?;
                     self.vm.data.push(Value::UTF8(name));
 
@@ -134,7 +150,7 @@ impl Compiler {
                         self.vm.data.len() as u8 - 1,
                     ]);
                 }
-            },
+            }
             Ast::FunDecl {
                 name,
                 params,
@@ -146,3 +162,4 @@ impl Compiler {
         Ok(())
     }
 }
+

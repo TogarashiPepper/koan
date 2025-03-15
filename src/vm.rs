@@ -37,13 +37,14 @@ pub enum OpCode {
     Load,
     DefineGlobal,
     GetGlobal,
+    DebugStack,
 }
 
 impl TryFrom<u8> for OpCode {
     type Error = KoanError;
 
     fn try_from(value: u8) -> Result<Self> {
-        if value < 23 {
+        if value < 24 {
             unsafe {
                 // SAFETY: OpCode only has 20 elements so we ensure `value` is in the 0..9 range
                 Ok(std::mem::transmute::<u8, OpCode>(value))
@@ -73,6 +74,28 @@ impl VM {
             stack: vec![],
             globals: HashMap::new(),
         }
+    }
+
+    pub fn dbg_chunk(&self) {
+        let mut skip_conv = false;
+
+        println!("[");
+        for ins in &self.chunk {
+            if !skip_conv {
+                let op = OpCode::try_from(*ins).unwrap();
+                if matches!(op, OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::Load) {
+                    skip_conv = true;
+                }
+
+                println!("\t{op:?},");
+            } else {
+                println!("\t{ins},");
+                skip_conv = false;
+            }
+
+        }
+
+        println!("]");
     }
 
     pub fn calc_stack_effect(&self) -> i64 {
@@ -105,7 +128,8 @@ impl VM {
                 | OpCode::Floor
                 | OpCode::Print
                 | OpCode::PiTimes
-                | OpCode::Abs => 0,
+                | OpCode::Abs
+                | OpCode::DebugStack => 0,
                 OpCode::Load | OpCode::GetGlobal => {
                     skip = true;
                     1
@@ -196,7 +220,7 @@ impl VM {
 
                     #[allow(clippy::map_entry)]
                     // Clippy suggestion forces us to move name, which makes the else case fail
-                    if self.globals.contains_key(&name) {
+                    if !self.globals.contains_key(&name) {
                         self.globals.insert(name, val);
                     } else {
                         return Err(VmError::GlobalAlreadyDefined(name).into());
@@ -218,6 +242,9 @@ impl VM {
                         .ok_or_else(|| InterpError::UndefVar(name.to_owned()))?;
 
                     self.stack.push(val);
+                }
+                OpCode::DebugStack => {
+                    println!("{:?}", self.stack);
                 }
                 OpCode::Not => todo!(),
             }
