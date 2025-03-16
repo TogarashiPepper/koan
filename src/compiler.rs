@@ -24,6 +24,10 @@ impl Compiler {
         self.vm
     }
 
+    fn resolve_local(&self, name: &str) -> Option<usize> {
+        self.locals.iter().position(|local| local.name == name)
+    }
+
     pub fn compile_expr(&mut self, eref: ExprRef, pool: &ExprPool) -> Result<()> {
         match pool.get(eref) {
             Expr::BinOp { lhs, op, rhs } => {
@@ -89,7 +93,11 @@ impl Compiler {
                     (self.vm.data.len() - 1) as u8,
                 ]);
             }
-            Expr::Ident(name) => todo!(),
+            Expr::Ident(name) => {
+                if let Some(idx) = self.resolve_local(&name) {
+                    todo!()
+                }
+            },
             Expr::FunCall(_, _) => todo!(),
             Expr::Array(_) => todo!(),
             Expr::IfElse {
@@ -111,7 +119,6 @@ impl Compiler {
                 self.vm.chunk.push(OpCode::Discard as u8);
             }
             Ast::Block(mut stmts) => {
-                // TODO: handle scoping, pop-ing values off stack etc
                 self.scope_depth += 1;
 
                 let Some(last) = stmts.pop() else {
