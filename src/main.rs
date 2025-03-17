@@ -28,7 +28,7 @@ use koan::repl::repl;
 // }
 
 fn main() {
-    let prg = "let x = 1; { let y = 2; { let z = 3; let q = 4; x + y + z + q } }";
+    let prg = "let x = 1; let n = 2; { let y = 2; { let z = 3; let q = 4; print(x + y + z + q) } } print(n);";
     let prg = lex(prg).and_then(parse).unwrap();
 
     let mut compiler = Compiler::default();
@@ -38,7 +38,7 @@ fn main() {
     
     let mut vm = compiler.finish();
 
-    println!("{:#?}", vm.run());
+    vm.run().unwrap();
 }
 
 fn run_file(path: PathBuf) -> Result<()> {

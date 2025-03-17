@@ -7,6 +7,7 @@ use crate::{
     vm::{OpCode, VM},
 };
 
+#[derive(Debug)]
 pub struct Local {
     name: String,
     depth: u32,
@@ -94,11 +95,39 @@ impl Compiler {
                 ]);
             }
             Expr::Ident(name) => {
-                if let Some(idx) = self.resolve_local(&name) {
-                    todo!()
+                if let Some(idx) = self.resolve_local(name) {
+                    self.vm
+                        .chunk
+                        .extend_from_slice(&[OpCode::GetLocal as u8, idx as u8]);
+                } else {
+                    let idx = self
+                        .vm
+                        .data
+                        .iter()
+                        .position(|x| matches!(x, Value::UTF8(k) if k == name))
+                        .unwrap_or_else(|| {
+                            self.vm.data.push(Value::UTF8(name.to_owned()));
+                            self.vm.data.len() - 1
+                        });
+
+                    // TODO: handle >255 locals (if even worth it?)
+                    self.vm
+                        .chunk
+                        .extend_from_slice(&[OpCode::GetGlobal as u8, idx as u8]);
                 }
-            },
-            Expr::FunCall(_, _) => todo!(),
+            }
+            Expr::FunCall(name, args) => {
+                match name.as_str() {
+                    "print" => {
+                        // TODO: space deliminate rather than \n, like in readme
+                        for arg in args {
+                            self.compile_expr(*arg, pool)?;
+                            self.vm.chunk.push(OpCode::Print as u8);
+                        }
+                    }
+                    _ => todo!(),
+                }
+            }
             Expr::Array(_) => todo!(),
             Expr::IfElse {
                 cond,
@@ -129,19 +158,34 @@ impl Compiler {
                     self.compile(stmt, pool)?;
                 }
 
-                self.scope_depth -= 1;
+                let top_before = self.vm.chunk.len();
+                self.compile(last, pool)?;
 
-                for idx in (0..self.locals.len()).rev() {
-                    if self.locals[idx].depth <= self.scope_depth {
-                        break;
-                    }
+                let effect = VM::calc_stack_effect(&self.vm.chunk[top_before..]);
 
-                    self.vm.chunk.push(OpCode::Discard as u8);
+                // TODO: find out if last adds a value to the stack and preserve/restore
+                assert!(effect == 0 || effect == 1);
+
+                let mut discard = OpCode::Discard;
+                if effect == 1 {
+                    discard = OpCode::DiscardUnder;
                 }
 
-                self.compile(last, pool)?;
+                let local_count = self
+                    .locals
+                    .iter()
+                    .filter(|local| local.depth == self.scope_depth)
+                    .count();
+
+                for _ in 0..local_count {
+                    self.vm.chunk.push(discard as u8);
+                }
+
+                self.scope_depth -= 1;
             }
             Ast::LetDecl { name, ty: _, body } => {
+                self.compile_expr(body, pool)?;
+
                 if self.scope_depth > 0 {
                     // TODO: error if shadowed
                     self.locals.push(Local {
@@ -149,7 +193,6 @@ impl Compiler {
                         depth: self.scope_depth,
                     });
                 } else {
-                    self.compile_expr(body, pool)?;
                     self.vm.data.push(Value::UTF8(name));
 
                     self.vm.chunk.extend_from_slice(&[
@@ -169,4 +212,3 @@ impl Compiler {
         Ok(())
     }
 }
-

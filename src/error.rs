@@ -100,6 +100,8 @@ pub enum VmError {
     MissingParameter(OpCode),
     #[error("Global `{0} is already defined`")]
     GlobalAlreadyDefined(String),
+    #[error("Attempted to `Restore` without a value in `tmp_slot`")]
+    EmptyRestore,
 }
 
 #[derive(Debug, PartialEq)]

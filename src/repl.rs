@@ -126,7 +126,7 @@ pub fn repl() -> Result<()> {
                         compiler.compile_expr(e, &pool)?;
 
                         let mut vm = compiler.finish();
-                        println!("{}", vm.calc_stack_effect());
+                        println!("{}", VM::calc_stack_effect(&vm.chunk));
 
                         vm.run()?;
 

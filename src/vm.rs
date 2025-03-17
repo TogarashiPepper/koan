@@ -11,7 +11,7 @@ use std::{
 };
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum OpCode {
     Add,
     Sub,
@@ -38,13 +38,15 @@ pub enum OpCode {
     DefineGlobal,
     GetGlobal,
     DebugStack,
+    GetLocal,
+    DiscardUnder,
 }
 
 impl TryFrom<u8> for OpCode {
     type Error = KoanError;
 
     fn try_from(value: u8) -> Result<Self> {
-        if value < 24 {
+        if value < 26 {
             unsafe {
                 // SAFETY: OpCode only has 20 elements so we ensure `value` is in the 0..9 range
                 Ok(std::mem::transmute::<u8, OpCode>(value))
@@ -55,6 +57,7 @@ impl TryFrom<u8> for OpCode {
     }
 }
 
+#[derive(Debug)]
 pub struct VM {
     pub chunk: Vec<u8>,
     // TODO: limit to 255 so a `load` can have a 1byte param
@@ -76,14 +79,20 @@ impl VM {
         }
     }
 
-    pub fn dbg_chunk(&self) {
+    pub fn dbg_chunk(chunk: &[u8]) {
         let mut skip_conv = false;
 
         println!("[");
-        for ins in &self.chunk {
+        for ins in chunk {
             if !skip_conv {
                 let op = OpCode::try_from(*ins).unwrap();
-                if matches!(op, OpCode::DefineGlobal | OpCode::GetGlobal | OpCode::Load) {
+                if matches!(
+                    op,
+                    OpCode::DefineGlobal
+                        | OpCode::GetGlobal
+                        | OpCode::GetLocal
+                        | OpCode::Load
+                ) {
                     skip_conv = true;
                 }
 
@@ -92,17 +101,16 @@ impl VM {
                 println!("\t{ins},");
                 skip_conv = false;
             }
-
         }
 
         println!("]");
     }
 
-    pub fn calc_stack_effect(&self) -> i64 {
+    pub fn calc_stack_effect(chunk: &[u8]) -> i64 {
         let mut skip = false;
         let mut effect = 0;
 
-        for ins in &self.chunk {
+        for ins in chunk {
             if skip {
                 skip = false;
                 continue;
@@ -122,15 +130,16 @@ impl VM {
                 | OpCode::LesserEq
                 | OpCode::Or
                 | OpCode::And
-                | OpCode::Discard => -1,
+                | OpCode::Discard
+                | OpCode::DiscardUnder
+                | OpCode::Print => -1,
                 OpCode::Not
                 | OpCode::Sqrt
                 | OpCode::Floor
-                | OpCode::Print
                 | OpCode::PiTimes
                 | OpCode::Abs
                 | OpCode::DebugStack => 0,
-                OpCode::Load | OpCode::GetGlobal => {
+                OpCode::Load | OpCode::GetGlobal | OpCode::GetLocal => {
                     skip = true;
                     1
                 }
@@ -144,6 +153,117 @@ impl VM {
         effect
     }
 
+    fn run_instruction(&mut self, ins: u8) -> Result<()> {
+        let op_code: OpCode = ins.try_into()?;
+
+        match op_code {
+            OpCode::Add => self.bin_op(Value::add)?,
+            OpCode::Sub => self.bin_op(Value::sub)?,
+            OpCode::Mul => self.bin_op(Value::mul)?,
+            OpCode::Div => self.bin_op(Value::div)?,
+            OpCode::Pow => self.bin_op(Value::pow)?,
+            OpCode::Abs => self.un_op(Value::abs)?,
+            OpCode::Sqrt => self.un_op(Value::sqrt)?,
+            OpCode::Floor => todo!(),
+            OpCode::Load => {
+                let cnst_idx = self
+                    .read_byte()
+                    .ok_or(VmError::MissingParameter(OpCode::Load))?;
+
+                self.push(self.data.get(cnst_idx as usize).unwrap().clone());
+            }
+            OpCode::Print => {
+                match self.pop()? {
+                    Value::Num(x) => println!("{}", x),
+                    Value::UTF8(x) => println!("{}", x),
+                    Value::Array(x) => println!("{:?}", x),
+                    Value::Nothing => println!("nothing"),
+                }
+            },
+            OpCode::Eq => self.bin_op(|l, r| Ok(Value::Num(f64::from(l == r))))?,
+            OpCode::Neq => self.bin_op(|l, r| Ok(Value::Num(f64::from(l != r))))?,
+            OpCode::Greater => self.bin_op(|l, r| Ok(Value::Num(f64::from(l > r))))?,
+            OpCode::GreaterEq => self.bin_op(|l, r| Ok(Value::Num(f64::from(l >= r))))?,
+            OpCode::Lesser => self.bin_op(|l, r| Ok(Value::Num(f64::from(l < r))))?,
+            OpCode::LesserEq => self.bin_op(|l, r| Ok(Value::Num(f64::from(l <= r))))?,
+            OpCode::Or | OpCode::And => {
+                let b = self.pop()?;
+                let a = self.pop()?;
+
+                match (&b, &a) {
+                    (Value::Num(l), Value::Num(r)) => {
+                        todo!()
+                    }
+                    _ => {
+                        return Err(InterpError::MismatchedTypes(
+                            if op_code == OpCode::Or {
+                                Operator::DoublePipe
+                            } else {
+                                Operator::DoubleAnd
+                            },
+                            a.ty_str(),
+                            b.ty_str(),
+                        )
+                        .into())
+                    }
+                }
+            }
+            OpCode::Discard => {
+                // TODO: error if stack is empty when popped
+                self.stack.pop();
+            }
+            OpCode::PiTimes => self.un_op(|l| l * Value::Num(PI))?,
+            OpCode::DefineGlobal => {
+                let idx = self.read_byte().ok_or(VmError::MissingParameter(op_code))?;
+
+                let Value::UTF8(name) = self.data[idx as usize].clone() else {
+                    panic!("DefineGlobal data idx wasn't a str value");
+                };
+
+                let val = self.stack.pop().ok_or(VmError::StackEmpty)?;
+
+                #[allow(clippy::map_entry)]
+                // Clippy suggestion forces us to move name, which makes the else case fail
+                if !self.globals.contains_key(&name) {
+                    self.globals.insert(name, val);
+                } else {
+                    return Err(VmError::GlobalAlreadyDefined(name).into());
+                }
+            }
+            OpCode::GetGlobal => {
+                let idx = self.read_byte().ok_or(VmError::MissingParameter(op_code))?;
+
+                let Value::UTF8(name) = &self.data[idx as usize] else {
+                    panic!("GetGlobal data idx wasn't a str value");
+                };
+
+                let val = self
+                    .globals
+                    .get(name)
+                    .cloned()
+                    // TODO: merge interp and vm errors(?)
+                    .ok_or_else(|| InterpError::UndefVar(name.to_owned()))?;
+
+                self.stack.push(val);
+            }
+            OpCode::DebugStack => {
+                println!("{:?}", self.stack);
+            }
+            OpCode::GetLocal => {
+                let slot = self.read_byte().ok_or(VmError::MissingParameter(op_code))?;
+
+                let x = self.stack.get(slot as usize).unwrap();
+                self.stack.push(x.clone());
+            }
+            OpCode::DiscardUnder => {
+                self.stack.remove(self.stack.len() - 2);
+            }
+            OpCode::Not => todo!(),
+        }
+
+        Ok(())
+    }
+
     // TODO: ctx for in between runs? i.e for use in repl
     pub fn run(&mut self) -> Result<()> {
         loop {
@@ -151,103 +271,7 @@ impl VM {
                 break;
             };
 
-            let op_code: OpCode = byte.try_into()?;
-
-            match op_code {
-                OpCode::Add => self.bin_op(Value::add)?,
-                OpCode::Sub => self.bin_op(Value::sub)?,
-                OpCode::Mul => self.bin_op(Value::mul)?,
-                OpCode::Div => self.bin_op(Value::div)?,
-                OpCode::Pow => self.bin_op(Value::pow)?,
-                OpCode::Abs => self.un_op(Value::abs)?,
-                OpCode::Sqrt => self.un_op(Value::sqrt)?,
-                OpCode::Floor => todo!(),
-                OpCode::Load => {
-                    let cnst_idx = self
-                        .read_byte()
-                        .ok_or(VmError::MissingParameter(OpCode::Load))?;
-
-                    self.push(self.data.get(cnst_idx as usize).unwrap().clone());
-                }
-                OpCode::Print => println!("{:?}", self.pop()?),
-                OpCode::Eq => self.bin_op(|l, r| Ok(Value::Num(f64::from(l == r))))?,
-                OpCode::Neq => self.bin_op(|l, r| Ok(Value::Num(f64::from(l != r))))?,
-                OpCode::Greater => {
-                    self.bin_op(|l, r| Ok(Value::Num(f64::from(l > r))))?
-                }
-                OpCode::GreaterEq => {
-                    self.bin_op(|l, r| Ok(Value::Num(f64::from(l >= r))))?
-                }
-                OpCode::Lesser => self.bin_op(|l, r| Ok(Value::Num(f64::from(l < r))))?,
-                OpCode::LesserEq => {
-                    self.bin_op(|l, r| Ok(Value::Num(f64::from(l <= r))))?
-                }
-                OpCode::Or | OpCode::And => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-
-                    match (&b, &a) {
-                        (Value::Num(l), Value::Num(r)) => {
-                            todo!()
-                        }
-                        _ => {
-                            return Err(InterpError::MismatchedTypes(
-                                if op_code == OpCode::Or {
-                                    Operator::DoublePipe
-                                } else {
-                                    Operator::DoubleAnd
-                                },
-                                a.ty_str(),
-                                b.ty_str(),
-                            )
-                            .into())
-                        }
-                    }
-                }
-                OpCode::Discard => {
-                    self.stack.pop();
-                }
-                OpCode::PiTimes => self.un_op(|l| l * Value::Num(PI))?,
-                OpCode::DefineGlobal => {
-                    let idx =
-                        self.read_byte().ok_or(VmError::MissingParameter(op_code))?;
-
-                    let Value::UTF8(name) = self.data[idx as usize].clone() else {
-                        panic!("DefineGlobal data idx wasn't a str value");
-                    };
-
-                    let val = self.stack.pop().ok_or(VmError::StackEmpty)?;
-
-                    #[allow(clippy::map_entry)]
-                    // Clippy suggestion forces us to move name, which makes the else case fail
-                    if !self.globals.contains_key(&name) {
-                        self.globals.insert(name, val);
-                    } else {
-                        return Err(VmError::GlobalAlreadyDefined(name).into());
-                    }
-                }
-                OpCode::GetGlobal => {
-                    let idx =
-                        self.read_byte().ok_or(VmError::MissingParameter(op_code))?;
-
-                    let Value::UTF8(name) = &self.data[idx as usize] else {
-                        panic!("GetGlobal data idx wasn't a str value");
-                    };
-
-                    let val = self
-                        .globals
-                        .get(name)
-                        .cloned()
-                        // TODO: merge interp and vm errors(?)
-                        .ok_or_else(|| InterpError::UndefVar(name.to_owned()))?;
-
-                    self.stack.push(val);
-                }
-                OpCode::DebugStack => {
-                    println!("{:?}", self.stack);
-                }
-                OpCode::Not => todo!(),
-            }
+            self.run_instruction(byte)?;
         }
 
         Ok(())
