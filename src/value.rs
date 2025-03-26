@@ -1,7 +1,9 @@
 use std::{
-    fmt::{Display, Write},
+    fmt::Display,
     ops::{Add, Div, Mul, Neg, Not, Sub},
-    rc::Rc, str::FromStr,
+    rc::Rc,
+    str::FromStr,
+    fmt::Write,
 };
 
 use crate::{
@@ -11,12 +13,32 @@ use crate::{
 
 const COMPARISON_TOLERANCE: f64 = 1e-14;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Value {
     Num(f64),
     UTF8(String),
     Array(Rc<Vec<Value>>),
     Nothing,
+}
+
+impl Clone for Value {
+    #[cfg_attr(feature = "track_clones", track_caller)]
+    fn clone(&self) -> Self {
+        if cfg!(feature = "track_clones") {
+            use std::panic::Location;
+
+            println!("cloned: {:?}", self);
+            println!("location: {:?}", Location::caller());
+            println!();
+        }
+
+        match self {
+            Value::Num(f) => Value::Num(*f),
+            Value::UTF8(st) => Value::UTF8(st.clone()),
+            Value::Array(arr) => Value::Array(arr.clone()),
+            Value::Nothing => Value::Nothing,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -36,7 +58,7 @@ impl FromStr for ValTy {
             "string" => Self::String,
             "array" => Self::Array,
 
-            _ => return Err(ParseError::InvalidType(s.to_owned()).into())
+            _ => return Err(ParseError::InvalidType(s.to_owned()).into()),
         })
     }
 }
@@ -171,7 +193,9 @@ impl std::fmt::Display for Value {
                     write!(buf, "{x}, ")?;
                 }
 
-                buf.truncate(buf.len() - 2);
+                if v.len() >= 2 {
+                    buf.truncate(buf.len() - 2);
+                }
                 write!(buf, "]")?;
                 write!(f, "{}", buf)
             }

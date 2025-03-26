@@ -8,6 +8,7 @@ use std::{
     collections::HashMap,
     f64::consts::PI,
     ops::{Add, Div, Mul, Sub},
+    rc::Rc,
 };
 
 #[repr(u8)]
@@ -40,13 +41,14 @@ pub enum OpCode {
     DebugStack,
     GetLocal,
     DiscardUnder,
+    CreateArray,
 }
 
 impl TryFrom<u8> for OpCode {
     type Error = KoanError;
 
     fn try_from(value: u8) -> Result<Self> {
-        if value < 26 {
+        if value < 27 {
             unsafe {
                 // SAFETY: OpCode only has 20 elements so we ensure `value` is in the 0..9 range
                 Ok(std::mem::transmute::<u8, OpCode>(value))
@@ -79,6 +81,13 @@ impl VM {
         }
     }
 
+    pub fn with_globals(globals: HashMap<String, Value>) -> Self {
+        Self {
+            globals,
+            ..Default::default()
+        }
+    }
+
     pub fn dbg_chunk(chunk: &[u8]) {
         let mut skip_conv = false;
 
@@ -107,16 +116,17 @@ impl VM {
     }
 
     pub fn calc_stack_effect(chunk: &[u8]) -> i64 {
-        let mut skip = false;
         let mut effect = 0;
 
-        for ins in chunk {
-            if skip {
-                skip = false;
-                continue;
-            }
+        let mut idx = 0;
+        loop {
+            let Some(ins) = chunk.get(idx).copied() else {
+                break;
+            };
 
-            effect += match OpCode::try_from(*ins).unwrap() {
+            idx += 1;
+
+            effect += match OpCode::try_from(ins).unwrap() {
                 OpCode::Add
                 | OpCode::Sub
                 | OpCode::Mul
@@ -140,12 +150,18 @@ impl VM {
                 | OpCode::Abs
                 | OpCode::DebugStack => 0,
                 OpCode::Load | OpCode::GetGlobal | OpCode::GetLocal => {
-                    skip = true;
+                    idx += 1;
                     1
                 }
                 OpCode::DefineGlobal => {
-                    skip = true;
+                    idx += 1;
                     -1
+                }
+                OpCode::CreateArray => {
+                    let len = chunk[idx] as i64;
+                    idx += 1;
+
+                    1 - len
                 }
             }
         }
@@ -164,7 +180,12 @@ impl VM {
             OpCode::Pow => self.bin_op(Value::pow)?,
             OpCode::Abs => self.un_op(Value::abs)?,
             OpCode::Sqrt => self.un_op(Value::sqrt)?,
-            OpCode::Floor => todo!(),
+            OpCode::Floor => {
+                let v = self.stack.pop().ok_or(VmError::StackEmpty)?;
+                let floored = v.in_num("floor", |f| f.floor())?;
+
+                self.stack.push(floored);
+            }
             OpCode::Load => {
                 let cnst_idx = self
                     .read_byte()
@@ -172,13 +193,11 @@ impl VM {
 
                 self.push(self.data.get(cnst_idx as usize).unwrap().clone());
             }
-            OpCode::Print => {
-                match self.pop()? {
-                    Value::Num(x) => println!("{}", x),
-                    Value::UTF8(x) => println!("{}", x),
-                    Value::Array(x) => println!("{:?}", x),
-                    Value::Nothing => println!("nothing"),
-                }
+            OpCode::Print => match self.pop()? {
+                Value::Num(x) => println!("{}", x),
+                Value::UTF8(x) => println!("{}", x),
+                Value::Array(x) => println!("{:?}", x),
+                Value::Nothing => println!("nothing"),
             },
             OpCode::Eq => self.bin_op(|l, r| Ok(Value::Num(f64::from(l == r))))?,
             OpCode::Neq => self.bin_op(|l, r| Ok(Value::Num(f64::from(l != r))))?,
@@ -209,8 +228,9 @@ impl VM {
                 }
             }
             OpCode::Discard => {
-                // TODO: error if stack is empty when popped
-                self.stack.pop();
+                if self.stack.pop().is_none() {
+                    return Err(VmError::StackEmpty.into());
+                }
             }
             OpCode::PiTimes => self.un_op(|l| l * Value::Num(PI))?,
             OpCode::DefineGlobal => {
@@ -241,7 +261,6 @@ impl VM {
                     .globals
                     .get(name)
                     .cloned()
-                    // TODO: merge interp and vm errors(?)
                     .ok_or_else(|| InterpError::UndefVar(name.to_owned()))?;
 
                 self.stack.push(val);
@@ -258,13 +277,19 @@ impl VM {
             OpCode::DiscardUnder => {
                 self.stack.remove(self.stack.len() - 2);
             }
+            OpCode::CreateArray => {
+                let len = self.read_byte().ok_or(VmError::MissingParameter(op_code))?;
+
+                let new = self.stack.split_off(self.stack.len() - len as usize);
+
+                self.stack.push(Value::Array(Rc::new(new)));
+            }
             OpCode::Not => todo!(),
         }
 
         Ok(())
     }
 
-    // TODO: ctx for in between runs? i.e for use in repl
     pub fn run(&mut self) -> Result<()> {
         loop {
             let Some(byte) = self.read_byte() else {

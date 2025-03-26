@@ -1,5 +1,5 @@
 use crate::{
-    error::Result,
+    error::{InterpError, Result, VmError},
     lexer::Operator,
     parser::Ast,
     pool::{Expr, ExprPool, ExprRef},
@@ -75,13 +75,13 @@ impl Compiler {
                     .vm
                     .data
                     .iter()
-                    .position(|e| e == &Value::Num(*lit))
+                    .position(|e| *e == Value::Num(*lit))
                     .unwrap_or_else(|| {
                         self.vm.data.push(Value::Num(*lit));
                         self.vm.data.len() - 1
                     });
 
-                // TODO: check pos < u8::MAX
+                debug_assert!(pos < 256);
                 self.vm
                     .chunk
                     .extend_from_slice(&[OpCode::Load as u8, pos as u8]);
@@ -89,6 +89,7 @@ impl Compiler {
             Expr::StrLit(lit) => {
                 self.vm.data.push(Value::UTF8(lit.to_owned()));
 
+                debug_assert!(self.vm.data.len() < 256);
                 self.vm.chunk.extend_from_slice(&[
                     OpCode::Load as u8,
                     (self.vm.data.len() - 1) as u8,
@@ -96,6 +97,8 @@ impl Compiler {
             }
             Expr::Ident(name) => {
                 if let Some(idx) = self.resolve_local(name) {
+                    debug_assert!(idx < 256);
+
                     self.vm
                         .chunk
                         .extend_from_slice(&[OpCode::GetLocal as u8, idx as u8]);
@@ -107,10 +110,12 @@ impl Compiler {
                         .position(|x| matches!(x, Value::UTF8(k) if k == name))
                         .unwrap_or_else(|| {
                             self.vm.data.push(Value::UTF8(name.to_owned()));
+
                             self.vm.data.len() - 1
                         });
 
                     // TODO: handle >255 locals (if even worth it?)
+                    debug_assert!(idx < 256);
                     self.vm
                         .chunk
                         .extend_from_slice(&[OpCode::GetGlobal as u8, idx as u8]);
@@ -128,7 +133,18 @@ impl Compiler {
                     _ => todo!(),
                 }
             }
-            Expr::Array(_) => todo!(),
+            Expr::Array(exprs) => {
+                let len = exprs.len();
+
+                for expr in exprs {
+                    self.compile_expr(*expr, pool)?;
+                }
+
+                debug_assert!(len < 256);
+                self.vm
+                    .chunk
+                    .extend_from_slice(&[OpCode::CreateArray as u8, len as u8]);
+            }
             Expr::IfElse {
                 cond,
                 body,
@@ -142,15 +158,20 @@ impl Compiler {
     pub fn compile(&mut self, ast: Ast, pool: &ExprPool) -> Result<()> {
         match ast {
             Ast::Expression(e) => self.compile_expr(e, pool)?,
-            // TODO: pop off stack to discord? pop stack effect many elems?
             Ast::Statement(s) => {
+                let top = self.vm.chunk.len();
                 self.compile_expr(s, pool)?;
+
+                debug_assert_eq!(VM::calc_stack_effect(&self.vm.chunk[top..]), 1);
+
                 self.vm.chunk.push(OpCode::Discard as u8);
             }
             Ast::Block(mut stmts) => {
                 self.scope_depth += 1;
 
                 let Some(last) = stmts.pop() else {
+                    self.scope_depth -= 1;
+
                     return Ok(());
                 };
 
@@ -162,20 +183,33 @@ impl Compiler {
                 self.compile(last, pool)?;
 
                 let effect = VM::calc_stack_effect(&self.vm.chunk[top_before..]);
-
-                // TODO: find out if last adds a value to the stack and preserve/restore
-                assert!(effect == 0 || effect == 1);
+                debug_assert!(effect == 0 || effect == 1);
 
                 let mut discard = OpCode::Discard;
                 if effect == 1 {
                     discard = OpCode::DiscardUnder;
+
+                    // TODO: properly figure out how to handle how values returned from blocks
+                    // live on the stack. Because this is... horrible. 
+                    // idea: transform { 1 } into { let <unnameable> = 1; <unnameable> }
+                    // maybe this way depth can be scope_depth - 1, as it was before,
+                    // which didnt work out because
+                    // { let x = 1; { let y = 2; y + x } }
+                    // errors (todo: investigate cause)
+                    self.locals.push(Local {
+                        name: String::new(),
+                        depth: u32::MAX,
+                    });
                 }
 
-                let local_count = self
-                    .locals
-                    .iter()
-                    .filter(|local| local.depth == self.scope_depth)
-                    .count();
+                let mut local_count = 0;
+                self.locals.retain(|local| {
+                    if local.depth == self.scope_depth {
+                        local_count += 1;
+                    }
+
+                    local.depth != self.scope_depth
+                });
 
                 for _ in 0..local_count {
                     self.vm.chunk.push(discard as u8);
@@ -187,7 +221,10 @@ impl Compiler {
                 self.compile_expr(body, pool)?;
 
                 if self.scope_depth > 0 {
-                    // TODO: error if shadowed
+                    if self.locals.iter().any(|local| local.name == name) {
+                        return Err(VmError::GlobalAlreadyDefined(name).into());
+                    }
+
                     self.locals.push(Local {
                         name,
                         depth: self.scope_depth,

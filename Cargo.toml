@@ -18,6 +18,7 @@ harness = false
 [features]
 default = ["repl"]
 repl = ["dep:rustyline", "dep:syntect"]
+track_clones = []
 
 [profile.release]
 codegen-units = 1

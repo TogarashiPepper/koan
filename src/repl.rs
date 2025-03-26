@@ -1,7 +1,5 @@
 use std::{
-    borrow::Cow::{self, Borrowed, Owned},
-    fmt::Write,
-    io::stdout,
+    borrow::Cow::{self, Borrowed, Owned}, collections::HashMap, fmt::Write, io::stdout
 };
 
 use rustyline::{
@@ -102,6 +100,7 @@ pub fn repl() -> Result<()> {
     let mut rl = Editor::with_config(config).unwrap();
     rl.set_helper(Some(h));
     let mut state = State::new();
+    let mut globals = HashMap::new();
     let mut pool = ExprPool::new();
 
     loop {
@@ -120,23 +119,21 @@ pub fn repl() -> Result<()> {
                 //     pool: &pool,
                 // };
 
+                let mut compiler = Compiler::default();
                 for statement in ast {
-                    if let Ast::Expression(e) = statement {
-                        let mut compiler = Compiler::default();
-                        compiler.compile_expr(e, &pool)?;
-
-                        let mut vm = compiler.finish();
-                        println!("{}", VM::calc_stack_effect(&vm.chunk));
-
-                        vm.run()?;
-
-                        println!("{}", vm.stack.pop().unwrap());
-                    }
-                    // let r = ctx.eval_ast(statement)?;
-                    // if r != Value::Nothing {
-                    //     println!("{}", r);
-                    // }
+                    compiler.compile(statement, &pool).unwrap();
                 }
+                let mut vm = compiler.finish();
+                vm.globals = globals;
+
+                vm.run()?;
+
+                println!("{}", vm.stack.pop().unwrap());
+                globals = vm.globals;
+                // let r = ctx.eval_ast(statement)?;
+                // if r != Value::Nothing {
+                //     println!("{}", r);
+                // }
             }
             Err(ReadlineError::Interrupted) => {
                 println!("Interrupted");
