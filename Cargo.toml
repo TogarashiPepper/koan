@@ -1,9 +1,10 @@
 [package]
 name = "koan"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
+rand = "0.9.1"
 rustyline = { version = "14.0.0", features = ["derive"], optional = true }
 syntect = { version = "5.2.0", optional = true }
 thiserror = "1.0.62"
@@ -24,6 +25,7 @@ track_clones = []
 codegen-units = 1
 opt-level = 3
 lto = "fat"
+debug = 1
 
 [build]
 rustflags = ["-Z", "threads=8"]

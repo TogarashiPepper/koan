@@ -235,6 +235,29 @@ impl<W: Write> IntrpCtx<'_, W> {
             )),
             Expr::BinOp { .. } => unreachable!(),
             Expr::PreOp { .. } => unreachable!(),
+            Expr::Block(b) => {
+                // Enter new scope
+                self.state.variables.push(HashMap::new());
+
+                // TODO: dont do this, maybe let pool be mutable?
+                let mut b = b.clone();
+
+                let last = b.pop();
+
+                for node in b {
+                    self.eval_ast(node)?;
+                }
+
+                Ok(match last {
+                    Some(a) => {
+                        let res = self.eval_ast(a)?;
+                        self.state.variables.pop();
+
+                        res
+                    }
+                    None => Value::Nothing,
+                })
+            }
             Expr::IfElse {
                 cond,
                 body,
@@ -282,26 +305,6 @@ impl<W: Write> IntrpCtx<'_, W> {
             Ast::Statement(e) => {
                 let _ = self.eval(e)?;
                 Ok(Value::Nothing)
-            }
-            Ast::Block(mut b) => {
-                // Enter new scope
-                self.state.variables.push(HashMap::new());
-
-                let last = b.pop();
-
-                for node in b {
-                    self.eval_ast(node)?;
-                }
-
-                Ok(match last {
-                    Some(a) => {
-                        let res = self.eval_ast(a)?;
-                        self.state.variables.pop();
-
-                        res
-                    }
-                    None => Value::Nothing,
-                })
             }
             Ast::FunDecl {
                 name,

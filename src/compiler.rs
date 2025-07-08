@@ -13,7 +13,7 @@ pub struct Local {
     depth: u32,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Compiler {
     vm: VM,
     locals: Vec<Local>,
@@ -27,6 +27,24 @@ impl Compiler {
 
     fn resolve_local(&self, name: &str) -> Option<usize> {
         self.locals.iter().position(|local| local.name == name)
+    }
+
+    fn emit_jump(&mut self, op: OpCode) -> usize {
+        self.vm.chunk.extend_from_slice(&[op as u8, 0xff, 0xff]);
+        self.vm.chunk.len() - 2
+    }
+
+    fn patch_jump(&mut self, offset: usize) {
+        let jump = self.vm.chunk.len() - offset - 2;
+
+        if jump > u16::MAX.into() {
+            panic!("tried to jump over >u16::max bytes");
+        }
+
+        let [l, r] = (jump as u16).to_le_bytes();
+
+        self.vm.chunk[offset] = l;
+        self.vm.chunk[offset + 1] = r;
     }
 
     pub fn compile_expr(&mut self, eref: ExprRef, pool: &ExprPool) -> Result<()> {
@@ -140,34 +158,20 @@ impl Compiler {
                     self.compile_expr(*expr, pool)?;
                 }
 
-                debug_assert!(len < 256);
-                self.vm
-                    .chunk
-                    .extend_from_slice(&[OpCode::CreateArray as u8, len as u8]);
+                debug_assert!(len < u16::MAX as usize);
+                let len = (len as u16).to_le_bytes();
+
+                self.vm.chunk.extend_from_slice(&[
+                    OpCode::CreateArray as u8,
+                    len[0],
+                    len[1],
+                ]);
             }
-            Expr::IfElse {
-                cond,
-                body,
-                else_body,
-            } => todo!(),
-        }
-
-        Ok(())
-    }
-
-    pub fn compile(&mut self, ast: Ast, pool: &ExprPool) -> Result<()> {
-        match ast {
-            Ast::Expression(e) => self.compile_expr(e, pool)?,
-            Ast::Statement(s) => {
-                let top = self.vm.chunk.len();
-                self.compile_expr(s, pool)?;
-
-                debug_assert_eq!(VM::calc_stack_effect(&self.vm.chunk[top..]), 1);
-
-                self.vm.chunk.push(OpCode::Discard as u8);
-            }
-            Ast::Block(mut stmts) => {
+            Expr::Block(stmts) => {
                 self.scope_depth += 1;
+
+                // TODO: dont clone here
+                let mut stmts = stmts.clone();
 
                 let Some(last) = stmts.pop() else {
                     self.scope_depth -= 1;
@@ -190,7 +194,7 @@ impl Compiler {
                     discard = OpCode::DiscardUnder;
 
                     // TODO: properly figure out how to handle how values returned from blocks
-                    // live on the stack. Because this is... horrible. 
+                    // live on the stack. Because this is... horrible.
                     // idea: transform { 1 } into { let <unnameable> = 1; <unnameable> }
                     // maybe this way depth can be scope_depth - 1, as it was before,
                     // which didnt work out because
@@ -216,6 +220,53 @@ impl Compiler {
                 }
 
                 self.scope_depth -= 1;
+            }
+            Expr::IfElse {
+                cond,
+                body,
+                else_body,
+            } => {
+                // TODO: forbid if expressions that return a value without an `else`
+                // fix `if false { "hello" }` leaveing false on the stack
+                // fix blocks returning values as a whole, potentially
+                // implement mutability and desugar the following:
+                // 1 + { let x = 2; x + 2 }
+                // into:
+                // let <gensym>; { let x = 2; <gensym> = x + 2 }; 1 + <gensym>
+
+                self.compile_expr(*cond, pool)?;
+                let then_jmp = self.emit_jump(OpCode::JumpIfFalse);
+                self.vm.chunk.push(OpCode::Discard as u8);
+
+                // TODO: dont clone
+                self.compile(body.clone(), pool)?;
+
+                let else_jump = self.emit_jump(OpCode::Jump);
+                self.patch_jump(then_jmp);
+
+                self.vm.chunk.push(OpCode::Discard as u8);
+
+                if let Some(e_body) = else_body {
+                    self.compile(e_body.clone(), pool)?;
+                }
+
+                self.patch_jump(else_jump);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn compile(&mut self, ast: Ast, pool: &ExprPool) -> Result<()> {
+        match ast {
+            Ast::Expression(e) => self.compile_expr(e, pool)?,
+            Ast::Statement(s) => {
+                let top = self.vm.chunk.len();
+                self.compile_expr(s, pool)?;
+
+                debug_assert_eq!(VM::calc_stack_effect(&self.vm.chunk[top..]), 1);
+
+                self.vm.chunk.push(OpCode::Discard as u8);
             }
             Ast::LetDecl { name, ty: _, body } => {
                 self.compile_expr(body, pool)?;

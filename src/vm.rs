@@ -7,6 +7,7 @@ use crate::{
 use std::{
     collections::HashMap,
     f64::consts::PI,
+    io::Write,
     ops::{Add, Div, Mul, Sub},
     rc::Rc,
 };
@@ -42,13 +43,15 @@ pub enum OpCode {
     GetLocal,
     DiscardUnder,
     CreateArray,
+    JumpIfFalse,
+    Jump,
 }
 
 impl TryFrom<u8> for OpCode {
     type Error = KoanError;
 
     fn try_from(value: u8) -> Result<Self> {
-        if value < 27 {
+        if value < 29 {
             unsafe {
                 // SAFETY: OpCode only has 20 elements so we ensure `value` is in the 0..9 range
                 Ok(std::mem::transmute::<u8, OpCode>(value))
@@ -70,6 +73,23 @@ pub struct VM {
     pub globals: HashMap<String, Value>,
 }
 
+// TODO: make part of Value Enum
+struct Function {
+    chunk: Vec<u8>,
+    arity: usize,
+    name: String,
+}
+
+impl Function {
+    fn new(name: String, arity: usize) -> Self {
+        Self {
+            chunk: vec![],
+            arity,
+            name,
+        }
+    }
+}
+
 impl VM {
     pub fn new() -> Self {
         VM {
@@ -77,54 +97,114 @@ impl VM {
             data: vec![],
             pc: 0,
             stack: vec![],
-            globals: HashMap::new(),
+            globals: HashMap::from([
+                ("π".into(), Value::Num(std::f64::consts::PI)),
+                ("e".into(), Value::Num(std::f64::consts::E)),
+                ("true".into(), Value::Num(1.0)),
+                ("false".into(), Value::Num(0.0)),
+            ]),
         }
     }
 
     pub fn with_globals(globals: HashMap<String, Value>) -> Self {
-        Self {
-            globals,
-            ..Default::default()
-        }
+        let mut def = Self::new();
+
+        def.globals.extend(globals);
+
+        def
     }
 
-    pub fn dbg_chunk(chunk: &[u8]) {
-        let mut skip_conv = false;
+    pub fn dbg_chunk(&self) {
+        let mut idx = 0;
+        eprintln!("chunk.len: {}", self.chunk.len());
+        eprintln!("chunk: {:?}", self.chunk);
+        eprintln!("self.data: {:?}", self.data);
 
-        println!("[");
-        for ins in chunk {
-            if !skip_conv {
-                let op = OpCode::try_from(*ins).unwrap();
-                if matches!(
-                    op,
-                    OpCode::DefineGlobal
-                        | OpCode::GetGlobal
-                        | OpCode::GetLocal
-                        | OpCode::Load
-                ) {
-                    skip_conv = true;
-                }
-
-                println!("\t{op:?},");
-            } else {
-                println!("\t{ins},");
-                skip_conv = false;
+        loop {
+            if idx >= self.chunk.len() {
+                break;
             }
+
+            let byte = match OpCode::try_from(self.chunk[idx]) {
+                Ok(b) => b,
+                Err(e) => {
+                    println!("idx: {idx}");
+                    println!("{:?}", self.chunk);
+                    println!("{e:?}");
+
+                    std::process::exit(1);
+                }
+            };
+
+            eprint!("idx: {idx}; ");
+            eprint!("{byte:?}\t");
+
+            match byte {
+                OpCode::Add
+                | OpCode::Sub
+                | OpCode::Mul
+                | OpCode::Div
+                | OpCode::Sqrt
+                | OpCode::Pow
+                | OpCode::Floor
+                | OpCode::Abs
+                | OpCode::Print
+                | OpCode::Eq
+                | OpCode::Neq
+                | OpCode::Greater
+                | OpCode::GreaterEq
+                | OpCode::Lesser
+                | OpCode::LesserEq
+                | OpCode::Or
+                | OpCode::And
+                | OpCode::Not
+                | OpCode::PiTimes
+                | OpCode::Discard
+                | OpCode::DiscardUnder => {
+                    eprintln!();
+                }
+                OpCode::Load => {
+                    idx += 1;
+
+                    eprintln!("{:?}", self.data[self.chunk[idx] as usize]);
+                }
+                OpCode::GetGlobal | OpCode::DefineGlobal => {
+                    idx += 1;
+
+                    eprintln!("name: {}", self.data[self.chunk[idx] as usize]);
+                }
+                OpCode::GetLocal => {
+                    idx += 1;
+
+                    eprintln!("stack_idx: {}", self.chunk[idx]);
+                }
+                OpCode::JumpIfFalse | OpCode::Jump => {
+                    let chunk = &self.chunk;
+
+                    let offset = u16::from_le_bytes([chunk[idx + 1], chunk[idx + 2]]);
+
+                    eprintln!("offset: {offset}");
+
+                    idx += 2;
+                }
+                OpCode::DebugStack => todo!(),
+                OpCode::CreateArray => todo!(),
+            }
+
+            idx += 1;
         }
 
-        println!("]");
+        eprintln!();
     }
 
     pub fn calc_stack_effect(chunk: &[u8]) -> i64 {
-        let mut effect = 0;
+        let mut effect: i64 = 0;
 
         let mut idx = 0;
         loop {
             let Some(ins) = chunk.get(idx).copied() else {
                 break;
             };
-
-            idx += 1;
 
             effect += match OpCode::try_from(ins).unwrap() {
                 OpCode::Add
@@ -157,13 +237,19 @@ impl VM {
                     idx += 1;
                     -1
                 }
-                OpCode::CreateArray => {
-                    let len = chunk[idx] as i64;
-                    idx += 1;
-
-                    1 - len
+                OpCode::JumpIfFalse | OpCode::Jump => {
+                    idx += 2;
+                    0
                 }
-            }
+                OpCode::CreateArray => {
+                    let len = u16::from_le_bytes([chunk[idx], chunk[idx + 1]]);
+                    idx += 2;
+
+                    1 - len as i64
+                }
+            };
+
+            idx += 1;
         }
 
         effect
@@ -194,9 +280,9 @@ impl VM {
                 self.push(self.data.get(cnst_idx as usize).unwrap().clone());
             }
             OpCode::Print => match self.pop()? {
-                Value::Num(x) => println!("{}", x),
-                Value::UTF8(x) => println!("{}", x),
-                Value::Array(x) => println!("{:?}", x),
+                Value::Num(x) => println!("{x}"),
+                Value::UTF8(x) => println!("{x}"),
+                Value::Array(x) => println!("{x:?}"),
                 Value::Nothing => println!("nothing"),
             },
             OpCode::Eq => self.bin_op(|l, r| Ok(Value::Num(f64::from(l == r))))?,
@@ -243,7 +329,7 @@ impl VM {
                 let val = self.stack.pop().ok_or(VmError::StackEmpty)?;
 
                 #[allow(clippy::map_entry)]
-                // Clippy suggestion forces us to move name, which makes the else case fail
+                // TODO: file/check if bug in clippy
                 if !self.globals.contains_key(&name) {
                     self.globals.insert(name, val);
                 } else {
@@ -278,11 +364,30 @@ impl VM {
                 self.stack.remove(self.stack.len() - 2);
             }
             OpCode::CreateArray => {
-                let len = self.read_byte().ok_or(VmError::MissingParameter(op_code))?;
+                let len = self.read_u16().ok_or(VmError::MissingParameter(op_code))?;
 
                 let new = self.stack.split_off(self.stack.len() - len as usize);
 
                 self.stack.push(Value::Array(Rc::new(new)));
+            }
+            OpCode::JumpIfFalse => {
+                let offset = self.read_u16().ok_or(VmError::MissingParameter(op_code))?;
+                let last = self.stack.last();
+
+                match last {
+                    Some(Value::Num(0.0)) => self.pc += offset as usize,
+                    Some(Value::Num(1.0)) => {},
+                    Some(_) | None => return Err(InterpError::InvalidIfNum.into()),
+                }
+
+                if let Some(Value::Num(0.0)) = self.stack.last() {
+                    self.pc += offset as usize;
+                }
+            }
+            OpCode::Jump => {
+                let offset = self.read_u16().ok_or(VmError::MissingParameter(op_code))?;
+
+                self.pc += offset as usize;
             }
             OpCode::Not => todo!(),
         }
@@ -307,6 +412,15 @@ impl VM {
         self.pc += 1;
 
         byte
+    }
+
+    fn read_u16(&mut self) -> Option<u16> {
+        let b1 = self.chunk.get(self.pc).copied();
+        let b2 = self.chunk.get(self.pc + 1).copied();
+
+        self.pc += 2;
+
+        b1.zip(b2).map(|(l, r)| u16::from_le_bytes([l, r]))
     }
 
     fn pop(&mut self) -> Result<Value> {

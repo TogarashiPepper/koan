@@ -1,5 +1,8 @@
 use std::{
-    borrow::Cow::{self, Borrowed, Owned}, collections::HashMap, fmt::Write, io::stdout
+    borrow::Cow::{self, Borrowed, Owned},
+    collections::HashMap,
+    fmt::Write,
+    io::stdout,
 };
 
 use rustyline::{
@@ -99,8 +102,8 @@ pub fn repl() -> Result<()> {
     };
     let mut rl = Editor::with_config(config).unwrap();
     rl.set_helper(Some(h));
-    let mut state = State::new();
-    let mut globals = HashMap::new();
+    // let mut state = State::new();
+    let mut globals = VM::default().globals;
     let mut pool = ExprPool::new();
 
     loop {
@@ -110,7 +113,7 @@ pub fn repl() -> Result<()> {
         let readline = rl.readline(&p);
         match readline {
             Ok(line) => {
-                let stdout = stdout().lock();
+                // let stdout = stdout().lock();
 
                 let ast = lex(&line).and_then(|tks| parse_with_pool(tks, &mut pool))?;
                 // let mut ctx = IntrpCtx {
@@ -125,14 +128,20 @@ pub fn repl() -> Result<()> {
                 }
                 let mut vm = compiler.finish();
                 vm.globals = globals;
+                vm.dbg_chunk();
 
                 vm.run()?;
 
-                println!("{}", vm.stack.pop().unwrap());
+                if let Some(v) = vm.stack.pop() {
+                    println!("{v}");
+                }
                 globals = vm.globals;
-                // let r = ctx.eval_ast(statement)?;
-                // if r != Value::Nothing {
-                //     println!("{}", r);
+
+                // for statement in ast {
+                //     let r = ctx.eval_ast(statement)?;
+                //     if r != Value::Nothing {
+                //         println!("{}", r);
+                //     }
                 // }
             }
             Err(ReadlineError::Interrupted) => {

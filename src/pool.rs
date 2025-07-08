@@ -23,6 +23,7 @@ pub enum Expr {
         body: Ast,
         else_body: Option<Ast>,
     },
+    Block(Vec<Ast>),
 }
 
 impl Expr {
@@ -109,6 +110,10 @@ impl ExprPool {
 
     pub fn get(&self, exp_ref: ExprRef) -> &Expr {
         &self.0[exp_ref.0]
+    }
+
+    pub fn get_mut(&mut self, exp_ref: ExprRef) -> &mut Expr {
+        &mut self.0[exp_ref.0]
     }
 
     pub fn push(&mut self, expr: Expr) -> ExprRef {

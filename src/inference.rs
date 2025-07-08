@@ -51,42 +51,17 @@ pub fn infer(ast: &Ast, pool: &ExprPool, state_sim: &mut StateSim) -> Result<Val
     match ast {
         Ast::Expression(e) => infer_exp(*e, pool, state_sim),
         Ast::Statement(_) => Ok(ValTy::Nothing),
-        Ast::Block(statements) => {
-            state_sim.variables.push(HashMap::new());
-            let len = statements.len();
-
-            if len >= 2 {
-                for stmt in &statements[0..=len - 2] {
-                    // We don't care about the type but we want any variables registered to be
-                    // added to `state_sim`
-                    let _ = infer(stmt, pool, state_sim)?;
-                }
-            }
-
-            let res = if len >= 1 {
-                let ret_val = &statements[len - 1];
-
-                infer(ret_val, pool, state_sim)
-            } else {
-                Ok(ValTy::Nothing)
-            };
-
-            state_sim.variables.pop();
-
-            res
-        }
         Ast::LetDecl { name, ty, body } => {
             let inferred = infer_exp(*body, pool, state_sim)?;
 
-            // TODO: could benefit from feature `if-let-chains`
-            if let Some(ty) = ty {
-                if *ty != inferred {
-                    return Err(InterpError::InvalidLetType(
-                        ty.to_string(),
-                        inferred.to_string(),
-                    )
-                    .into());
-                }
+            if let Some(ty) = ty
+                && *ty != inferred
+            {
+                return Err(InterpError::InvalidLetType(
+                    ty.to_string(),
+                    inferred.to_string(),
+                )
+                .into());
             }
 
             state_sim.set(name.to_owned(), inferred);
@@ -123,18 +98,10 @@ pub fn annotate(ast: Ast, pool: &ExprPool) -> Result<Ast> {
 
 fn annotate_inner(ast: Ast, pool: &ExprPool, sim: &mut StateSim) -> Result<Ast> {
     match ast {
-        Ast::Expression(_) | Ast::Statement(_) => Ok(ast),
-        b @ Ast::Block(_) => {
-            infer(&b, pool, sim)?;
-
-            let Ast::Block(stmts) = b else { unreachable!() };
-
-            let stmts = stmts
-                .into_iter()
-                .map(|st| annotate_inner(st, pool, sim))
-                .collect::<Result<Vec<Ast>>>()?;
-
-            Ok(Ast::Block(stmts))
+        Ast::Statement(_) => Ok(ast),
+        x @ Ast::Expression(expr) => {
+            infer_exp(expr, pool, sim)?;
+            Ok(x)
         }
         Ast::LetDecl { ref name, ty, body } => {
             let inferred = infer(&ast, pool, sim)?;
@@ -187,7 +154,7 @@ pub fn infer_exp(
                     (l, r) => {
                         return Err(
                             InterpError::MismatchedTypes(Operator::Power, l, r).into()
-                        )
+                        );
                     }
                 },
                 Operator::Slash => match (lhs, rhs) {
@@ -197,7 +164,7 @@ pub fn infer_exp(
                     (l, r) => {
                         return Err(
                             InterpError::MismatchedTypes(Operator::Slash, l, r).into()
-                        )
+                        );
                     }
                 },
                 Operator::Plus => match (lhs, rhs) {
@@ -208,7 +175,7 @@ pub fn infer_exp(
                     (l, r) => {
                         return Err(
                             InterpError::MismatchedTypes(Operator::Plus, l, r).into()
-                        )
+                        );
                     }
                 },
                 Operator::Minus => match (lhs, rhs) {
@@ -218,7 +185,7 @@ pub fn infer_exp(
                     (l, r) => {
                         return Err(
                             InterpError::MismatchedTypes(Operator::Minus, l, r).into()
-                        )
+                        );
                     }
                 },
                 Operator::Times => match (lhs, rhs) {
@@ -229,7 +196,7 @@ pub fn infer_exp(
                     (l, r) => {
                         return Err(
                             InterpError::MismatchedTypes(Operator::Times, l, r).into()
-                        )
+                        );
                     }
                 },
                 Operator::DoubleEqual
@@ -307,6 +274,30 @@ pub fn infer_exp(
 
             body_ty
         }
+        Expr::Block(statements) => {
+            state_sim.variables.push(HashMap::new());
+            let len = statements.len();
+
+            if len >= 2 {
+                for stmt in &statements[0..=len - 2] {
+                    // We don't care about the type but we want any variables registered to be
+                    // added to `state_sim`
+                    let _ = infer(stmt, pool, state_sim)?;
+                }
+            }
+
+            let res = if len >= 1 {
+                let ret_val = &statements[len - 1];
+
+                infer(ret_val, pool, state_sim)
+            } else {
+                Ok(ValTy::Nothing)
+            };
+
+            state_sim.variables.pop();
+
+            res?
+        }
     })
 }
 
@@ -314,11 +305,11 @@ pub fn infer_exp(
 mod tests {
     use crate::{
         lexer::lex,
-        parser::{parse, Ast},
+        parser::{Ast, parse},
         value::ValTy,
     };
 
-    use super::{infer_exp, StateSim};
+    use super::{StateSim, infer_exp};
 
     fn test_infer_exp(input: String, expected: ValTy) {
         let (ast, pool) = lex(input.as_str()).and_then(parse).unwrap();

@@ -1,8 +1,4 @@
-use std::{
-    iter::Peekable,
-    ops::Range,
-    str::CharIndices,
-};
+use std::{iter::Peekable, ops::Range, str::CharIndices};
 
 use crate::error::{LexError, Result};
 
@@ -510,7 +506,6 @@ mod tests {
     fn lex_neq() {
         lex_single("!=", Op(NotEqual));
         lex_single("≠", Op(NotEqual));
-
     }
 
     #[test]

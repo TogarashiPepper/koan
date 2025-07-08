@@ -1,9 +1,9 @@
 use std::{
     fmt::Display,
+    fmt::Write,
     ops::{Add, Div, Mul, Neg, Not, Sub},
     rc::Rc,
     str::FromStr,
-    fmt::Write,
 };
 
 use crate::{

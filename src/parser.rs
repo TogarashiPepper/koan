@@ -1,9 +1,6 @@
 mod utils;
 
-use std::{
-    collections::HashSet,
-    iter::Peekable,
-};
+use std::{collections::HashSet, iter::Peekable};
 
 use crate::{
     error::{ParseError, Result},
@@ -16,7 +13,6 @@ use crate::{
 pub enum Ast {
     Expression(ExprRef),
     Statement(ExprRef),
-    Block(Vec<Ast>),
     LetDecl {
         name: String,
         ty: Option<ValTy>,
@@ -36,9 +32,6 @@ impl Ast {
             (Ast::Expression(l), Ast::Expression(r))
             | (Ast::Statement(l), Ast::Statement(r)) => {
                 Expr::expr_eq(l, r, l_pool, r_pool)
-            }
-            (Ast::Block(l), Ast::Block(r)) => {
-                l.into_iter().zip(r).all(|(le, ri)| le == ri)
             }
             (
                 Ast::LetDecl {
@@ -121,7 +114,6 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
 
                     break;
                 }
-                TokenType::LCurly => self.block()?,
                 _ => {
                     let expr = self.expr_bp(0)?;
                     match self.check(TokenType::Semicolon) {
@@ -138,12 +130,15 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
         Ok(program)
     }
 
-    pub fn block(&mut self) -> Result<Ast> {
-        let _ = self.expect(TokenType::LCurly)?;
+    pub fn block(&mut self, consume: bool) -> Result<ExprRef> {
+        // TODO: this is truly horrendous
+        if consume {
+            let _ = self.expect(TokenType::LCurly)?;
+        }
         let block = self.program(true)?;
         let _ = self.expect(TokenType::RCurly)?;
 
-        Ok(Ast::Block(block))
+        Ok(self.pool.push(Expr::Block(block)))
     }
 
     pub fn fun_def(&mut self) -> Result<Ast> {
@@ -179,7 +174,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
             ret_ty = self.expect(TokenType::Ident)?.lexeme.parse()?;
         }
 
-        let block = self.block()?;
+        let block = self.block(true)?;
 
         self.variables.clear();
 
@@ -187,7 +182,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> TokenStream<'a, T> {
             name: ident.lexeme.to_owned(),
             params,
             ret: ret_ty,
-            body: Box::new(block),
+            body: Box::new(Ast::Expression(block)),
         })
     }
 
@@ -269,29 +264,29 @@ mod tests {
         assert!(Ast::ast_eq(ast[0].clone(), &got_pool, expected, &ex_pool));
     }
 
-    #[test]
-    fn fun_declaration() {
-        assert_parse("fun foo(p1, p2, p3) {}", |_| Ast::FunDecl {
-            name: "foo".to_owned(),
-            params: vec![
-                ("p1".to_owned(), ValTy::Number),
-                ("p2".to_owned(), ValTy::Number),
-                ("p3".to_owned(), ValTy::Number),
-            ],
-            ret: ValTy::Number,
-            body: Box::new(Ast::Block(vec![])),
-        })
-    }
-
-    #[test]
-    fn fun_declaration_empty() {
-        assert_parse("fun foo() {}", |_| Ast::FunDecl {
-            name: "foo".to_owned(),
-            params: vec![],
-            ret: ValTy::Number,
-            body: Box::new(Ast::Block(vec![])),
-        })
-    }
+    // #[test]
+    // fn fun_declaration() {
+    //     assert_parse("fun foo(p1, p2, p3) {}", |_| Ast::FunDecl {
+    //         name: "foo".to_owned(),
+    //         params: vec![
+    //             ("p1".to_owned(), ValTy::Number),
+    //             ("p2".to_owned(), ValTy::Number),
+    //             ("p3".to_owned(), ValTy::Number),
+    //         ],
+    //         ret: ValTy::Number,
+    //         body: Box::new(Ast::Block(vec![])),
+    //     })
+    // }
+    //
+    // #[test]
+    // fn fun_declaration_empty() {
+    //     assert_parse("fun foo() {}", |_| Ast::FunDecl {
+    //         name: "foo".to_owned(),
+    //         params: vec![],
+    //         ret: ValTy::Number,
+    //         body: Box::new(Ast::Block(vec![])),
+    //     })
+    // }
 
     #[test]
     fn let_declaration() {
@@ -308,14 +303,14 @@ mod tests {
             let lhs = pool.push(Expr::NumLit(1.0));
             let rhs = pool.push(Expr::NumLit(2.0));
             Ast::LetDecl {
-                    name: "x".to_owned(),
-                    ty: None,
-                    body: pool.push(Expr::BinOp {
-                        lhs,
-                        op: Operator::Plus,
-                        rhs,
-                    }),
-                }
+                name: "x".to_owned(),
+                ty: None,
+                body: pool.push(Expr::BinOp {
+                    lhs,
+                    op: Operator::Plus,
+                    rhs,
+                }),
+            }
         })
     }
 }

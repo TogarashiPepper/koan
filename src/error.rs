@@ -3,7 +3,8 @@ use thiserror::Error;
 
 use crate::{
     lexer::{Operator, TokenType},
-    value::ValTy, vm::OpCode,
+    value::ValTy,
+    vm::OpCode,
 };
 
 pub type Result<T> = std::result::Result<T, KoanError>;
