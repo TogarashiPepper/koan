@@ -73,23 +73,6 @@ pub struct VM {
     pub globals: HashMap<String, Value>,
 }
 
-// TODO: make part of Value Enum
-struct Function {
-    chunk: Vec<u8>,
-    arity: usize,
-    name: String,
-}
-
-impl Function {
-    fn new(name: String, arity: usize) -> Self {
-        Self {
-            chunk: vec![],
-            arity,
-            name,
-        }
-    }
-}
-
 impl VM {
     pub fn new() -> Self {
         VM {
@@ -279,12 +262,7 @@ impl VM {
 
                 self.push(self.data.get(cnst_idx as usize).unwrap().clone());
             }
-            OpCode::Print => match self.pop()? {
-                Value::Num(x) => println!("{x}"),
-                Value::UTF8(x) => println!("{x}"),
-                Value::Array(x) => println!("{x:?}"),
-                Value::Nothing => println!("nothing"),
-            },
+            OpCode::Print => println!("{}", self.pop()?),
             OpCode::Eq => self.bin_op(|l, r| Ok(Value::Num(f64::from(l == r))))?,
             OpCode::Neq => self.bin_op(|l, r| Ok(Value::Num(f64::from(l != r))))?,
             OpCode::Greater => self.bin_op(|l, r| Ok(Value::Num(f64::from(l > r))))?,
@@ -309,7 +287,7 @@ impl VM {
                             a.ty_str(),
                             b.ty_str(),
                         )
-                        .into())
+                        .into());
                     }
                 }
             }
@@ -376,7 +354,7 @@ impl VM {
 
                 match last {
                     Some(Value::Num(0.0)) => self.pc += offset as usize,
-                    Some(Value::Num(1.0)) => {},
+                    Some(Value::Num(1.0)) => {}
                     Some(_) | None => return Err(InterpError::InvalidIfNum.into()),
                 }
 

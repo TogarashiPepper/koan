@@ -327,7 +327,7 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
                 return Err(LexError::InvalidToken(
                     input[idx..idx + otherwise.len_utf8()].to_string(),
                 )
-                .into())
+                .into());
             }
         });
 
@@ -340,10 +340,11 @@ pub fn lex(input: &str) -> Result<Vec<Token<'_>>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        lex, LexError,
+        LexError,
         Operator::*,
         Token,
         TokenType::{self, *},
+        lex,
     };
 
     fn lex_single(input: &'static str, expected: TokenType) {

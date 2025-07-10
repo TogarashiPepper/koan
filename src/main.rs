@@ -2,7 +2,7 @@ use std::{io::stdout, path::PathBuf, process::exit};
 
 use koan::{
     compiler::Compiler,
-    error::{handle_err, CliError, KoanError, Result},
+    error::{CliError, KoanError, Result, handle_err},
     interpreter::IntrpCtx,
     lexer::lex,
     parser::parse,

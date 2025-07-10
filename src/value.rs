@@ -13,32 +13,20 @@ use crate::{
 
 const COMPARISON_TOLERANCE: f64 = 1e-14;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Num(f64),
     UTF8(String),
     Array(Rc<Vec<Value>>),
+    Func(Function),
     Nothing,
 }
 
-impl Clone for Value {
-    #[cfg_attr(feature = "track_clones", track_caller)]
-    fn clone(&self) -> Self {
-        if cfg!(feature = "track_clones") {
-            use std::panic::Location;
-
-            println!("cloned: {:?}", self);
-            println!("location: {:?}", Location::caller());
-            println!();
-        }
-
-        match self {
-            Value::Num(f) => Value::Num(*f),
-            Value::UTF8(st) => Value::UTF8(st.clone()),
-            Value::Array(arr) => Value::Array(arr.clone()),
-            Value::Nothing => Value::Nothing,
-        }
-    }
+#[derive(Clone, Debug)]
+struct Function {
+    arity: usize,
+    chunk: Vec<u8>,
+    name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -47,6 +35,7 @@ pub enum ValTy {
     String,
     Array,
     Nothing,
+    Function,
 }
 
 impl FromStr for ValTy {
@@ -70,6 +59,7 @@ impl Display for ValTy {
             ValTy::String => "string",
             ValTy::Array => "array",
             ValTy::Nothing => "nothing",
+            ValTy::Function => "function",
         };
 
         write!(f, "{}", res)
@@ -83,6 +73,7 @@ impl Value {
             Value::UTF8(_) => ValTy::String,
             Value::Nothing => ValTy::Nothing,
             Value::Array(_) => ValTy::Array,
+            Value::Func(_) => ValTy::Function,
         }
     }
 
@@ -199,6 +190,13 @@ impl std::fmt::Display for Value {
                 write!(buf, "]")?;
                 write!(f, "{}", buf)
             }
+            Value::Func(Function {
+                arity,
+                chunk: _,
+                name,
+            }) => {
+                write!(f, "fn {name}(<{arity} args>)")
+            }
         }
     }
 }
@@ -249,7 +247,7 @@ impl Add for Value {
                     l.ty_str(),
                     r.ty_str(),
                 )
-                .into())
+                .into());
             }
         })
     }
@@ -274,7 +272,7 @@ impl Sub for Value {
                     l.ty_str(),
                     r.ty_str(),
                 )
-                .into())
+                .into());
             }
         })
     }
@@ -304,7 +302,7 @@ impl Mul for Value {
                     l.ty_str(),
                     r.ty_str(),
                 )
-                .into())
+                .into());
             }
         })
     }
@@ -335,7 +333,7 @@ impl Div for Value {
                     l.ty_str(),
                     r.ty_str(),
                 )
-                .into())
+                .into());
             }
         })
     }

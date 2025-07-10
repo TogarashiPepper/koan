@@ -1,7 +1,7 @@
 use crate::{
     error::{ParseError, Result},
     lexer::{Operator, Token, TokenType},
-    parser::{self, infix_binding_power, Ast, TokenStream},
+    parser::{self, Ast, TokenStream, infix_binding_power},
     pool::{Expr, ExprRef},
 };
 
@@ -120,7 +120,7 @@ mod tests {
 
     use crate::{
         error::Result,
-        lexer::{lex, Operator, Token},
+        lexer::{Operator, Token, lex},
         parser::TokenStream,
         pool::{Expr, ExprPool, ExprRef},
     };

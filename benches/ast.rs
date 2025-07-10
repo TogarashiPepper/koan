@@ -1,11 +1,11 @@
 use std::rc::Rc;
 
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
 use koan::{
     compiler::Compiler,
     interpreter::IntrpCtx,
     lexer::lex,
-    parser::{parse, Ast},
+    parser::{Ast, parse},
     pool::ExprPool,
     state::State,
     value::Value,

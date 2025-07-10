@@ -6,8 +6,8 @@ use std::{
 };
 
 use rustyline::{
-    error::ReadlineError, highlight::Highlighter, validate::MatchingBracketValidator,
-    Completer, Config, Editor, Helper, Hinter, Validator,
+    Completer, Config, Editor, Helper, Hinter, Validator, error::ReadlineError,
+    highlight::Highlighter, validate::MatchingBracketValidator,
 };
 use syntect::{
     easy::HighlightLines,
@@ -20,7 +20,7 @@ use crate::{
     error::Result,
     interpreter::IntrpCtx,
     lexer::lex,
-    parser::{parse_with_pool, Ast},
+    parser::{Ast, parse_with_pool},
     pool::ExprPool,
     state::State,
     value::Value,
