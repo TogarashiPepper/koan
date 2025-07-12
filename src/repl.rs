@@ -122,7 +122,7 @@ pub fn repl() -> Result<()> {
                 //     pool: &pool,
                 // };
 
-                let mut compiler = Compiler::default();
+                let mut compiler = Compiler::new();
                 for statement in ast {
                     compiler.compile(statement, &pool).unwrap();
                 }

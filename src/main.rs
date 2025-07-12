@@ -70,7 +70,7 @@ fn run_file(path: PathBuf) -> Result<()> {
 
     let (ast, pool) = lex(&file).and_then(parse)?;
 
-    let mut compiler = Compiler::default();
+    let mut compiler = Compiler::new();
     for statement in ast {
         compiler.compile(statement, &pool).unwrap();
     }

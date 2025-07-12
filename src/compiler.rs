@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use crate::{
     error::{InterpError, Result, VmError},
     lexer::Operator,
     parser::Ast,
     pool::{Expr, ExprPool, ExprRef},
-    value::Value,
+    value::{Function, Value},
     vm::{OpCode, VM},
 };
 
@@ -13,16 +15,66 @@ pub struct Local {
     depth: u32,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Compiler {
-    vm: VM,
+    data: Vec<Value>,
+    globals: HashMap<String, Value>,
+
     locals: Vec<Local>,
     scope_depth: u32,
+
+    functions: Vec<Function>,
+    current_fn: usize,
 }
 
 impl Compiler {
+    // TODO: get rid of this
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        let locals = vec![Local {
+            name: String::new(),
+            depth: 0,
+        }];
+
+        Compiler {
+            data: vec![],
+
+            locals,
+            scope_depth: 0,
+
+            functions: vec![Function {
+                arity: 0,
+                chunk: vec![],
+                name: "<main>".to_owned(),
+            }],
+            globals: HashMap::from([
+                ("π".into(), Value::Num(std::f64::consts::PI)),
+                ("e".into(), Value::Num(std::f64::consts::E)),
+                ("true".into(), Value::Num(1.0)),
+                ("false".into(), Value::Num(0.0)),
+            ]),
+
+            current_fn: 0,
+        }
+    }
+
     pub fn finish(self) -> VM {
-        self.vm
+        VM {
+            pc: 0,
+            stack: vec![],
+            globals: self.globals,
+            functions: self.functions,
+            current_fn: self.current_fn,
+            data: self.data,
+        }
+    }
+
+    fn chunk(&self) -> &[u8] {
+        &self.functions.last().unwrap().chunk
+    }
+
+    fn chunk_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.functions.last_mut().unwrap().chunk
     }
 
     fn resolve_local(&self, name: &str) -> Option<usize> {
@@ -30,12 +82,12 @@ impl Compiler {
     }
 
     fn emit_jump(&mut self, op: OpCode) -> usize {
-        self.vm.chunk.extend_from_slice(&[op as u8, 0xff, 0xff]);
-        self.vm.chunk.len() - 2
+        self.chunk_mut().extend_from_slice(&[op as u8, 0xff, 0xff]);
+        self.chunk().len() - 2
     }
 
     fn patch_jump(&mut self, offset: usize) {
-        let jump = self.vm.chunk.len() - offset - 2;
+        let jump = self.chunk().len() - offset - 2;
 
         if jump > u16::MAX.into() {
             panic!("tried to jump over >u16::max bytes");
@@ -43,8 +95,8 @@ impl Compiler {
 
         let [l, r] = (jump as u16).to_le_bytes();
 
-        self.vm.chunk[offset] = l;
-        self.vm.chunk[offset + 1] = r;
+        self.chunk_mut()[offset] = l;
+        self.chunk_mut()[offset + 1] = r;
     }
 
     pub fn compile_expr(&mut self, eref: ExprRef, pool: &ExprPool) -> Result<()> {
@@ -53,7 +105,7 @@ impl Compiler {
                 self.compile_expr(*lhs, pool)?;
                 self.compile_expr(*rhs, pool)?;
 
-                self.vm.chunk.push(match op {
+                self.chunk_mut().push(match op {
                     Operator::Power => OpCode::Pow,
                     Operator::Plus => OpCode::Add,
                     Operator::Minus => OpCode::Sub,
@@ -79,7 +131,7 @@ impl Compiler {
             Expr::PreOp { op, rhs } => {
                 self.compile_expr(*rhs, pool)?;
 
-                self.vm.chunk.push(match op {
+                self.chunk_mut().push(match op {
                     Operator::Not => OpCode::Not,
                     Operator::Abs => OpCode::Abs,
                     Operator::PiTimes => OpCode::PiTimes,
@@ -90,52 +142,47 @@ impl Compiler {
             }
             Expr::NumLit(lit) => {
                 let pos = self
-                    .vm
                     .data
                     .iter()
                     .position(|e| *e == Value::Num(*lit))
                     .unwrap_or_else(|| {
-                        self.vm.data.push(Value::Num(*lit));
-                        self.vm.data.len() - 1
+                        self.data.push(Value::Num(*lit));
+                        self.data.len() - 1
                     });
 
                 debug_assert!(pos < 256);
-                self.vm
-                    .chunk
+                self.chunk_mut()
                     .extend_from_slice(&[OpCode::Load as u8, pos as u8]);
             }
             Expr::StrLit(lit) => {
-                self.vm.data.push(Value::UTF8(lit.to_owned()));
+                self.data.push(Value::UTF8(lit.to_owned()));
 
-                debug_assert!(self.vm.data.len() < 256);
-                self.vm.chunk.extend_from_slice(&[
-                    OpCode::Load as u8,
-                    (self.vm.data.len() - 1) as u8,
-                ]);
+                debug_assert!(self.data.len() < 256);
+                let ld_idx = self.data.len() - 1;
+
+                self.chunk_mut()
+                    .extend_from_slice(&[OpCode::Load as u8, ld_idx as u8]);
             }
             Expr::Ident(name) => {
                 if let Some(idx) = self.resolve_local(name) {
                     debug_assert!(idx < 256);
 
-                    self.vm
-                        .chunk
+                    self.chunk_mut()
                         .extend_from_slice(&[OpCode::GetLocal as u8, idx as u8]);
                 } else {
                     let idx = self
-                        .vm
                         .data
                         .iter()
                         .position(|x| matches!(x, Value::UTF8(k) if k == name))
                         .unwrap_or_else(|| {
-                            self.vm.data.push(Value::UTF8(name.to_owned()));
+                            self.data.push(Value::UTF8(name.to_owned()));
 
-                            self.vm.data.len() - 1
+                            self.data.len() - 1
                         });
 
                     // TODO: handle >255 locals (if even worth it?)
                     debug_assert!(idx < 256);
-                    self.vm
-                        .chunk
+                    self.chunk_mut()
                         .extend_from_slice(&[OpCode::GetGlobal as u8, idx as u8]);
                 }
             }
@@ -145,7 +192,7 @@ impl Compiler {
                         // TODO: space deliminate rather than \n, like in readme
                         for arg in args {
                             self.compile_expr(*arg, pool)?;
-                            self.vm.chunk.push(OpCode::Print as u8);
+                            self.chunk_mut().push(OpCode::Print as u8);
                         }
                     }
                     _ => todo!(),
@@ -161,7 +208,7 @@ impl Compiler {
                 debug_assert!(len < u16::MAX as usize);
                 let len = (len as u16).to_le_bytes();
 
-                self.vm.chunk.extend_from_slice(&[
+                self.chunk_mut().extend_from_slice(&[
                     OpCode::CreateArray as u8,
                     len[0],
                     len[1],
@@ -183,10 +230,10 @@ impl Compiler {
                     self.compile(stmt, pool)?;
                 }
 
-                let top_before = self.vm.chunk.len();
+                let top_before = self.chunk().len();
                 self.compile(last, pool)?;
 
-                let effect = VM::calc_stack_effect(&self.vm.chunk[top_before..]);
+                let effect = VM::calc_stack_effect(&self.chunk()[top_before..]);
                 debug_assert!(effect == 0 || effect == 1);
 
                 let mut discard = OpCode::Discard;
@@ -216,7 +263,7 @@ impl Compiler {
                 });
 
                 for _ in 0..local_count {
-                    self.vm.chunk.push(discard as u8);
+                    self.chunk_mut().push(discard as u8);
                 }
 
                 self.scope_depth -= 1;
@@ -236,7 +283,7 @@ impl Compiler {
 
                 self.compile_expr(*cond, pool)?;
                 let then_jmp = self.emit_jump(OpCode::JumpIfFalse);
-                self.vm.chunk.push(OpCode::Discard as u8);
+                self.chunk_mut().push(OpCode::Discard as u8);
 
                 // TODO: dont clone
                 self.compile(body.clone(), pool)?;
@@ -244,7 +291,7 @@ impl Compiler {
                 let else_jump = self.emit_jump(OpCode::Jump);
                 self.patch_jump(then_jmp);
 
-                self.vm.chunk.push(OpCode::Discard as u8);
+                self.chunk_mut().push(OpCode::Discard as u8);
 
                 if let Some(e_body) = else_body {
                     self.compile(e_body.clone(), pool)?;
@@ -261,12 +308,12 @@ impl Compiler {
         match ast {
             Ast::Expression(e) => self.compile_expr(e, pool)?,
             Ast::Statement(s) => {
-                let top = self.vm.chunk.len();
+                let top = self.chunk().len();
                 self.compile_expr(s, pool)?;
 
-                debug_assert_eq!(VM::calc_stack_effect(&self.vm.chunk[top..]), 1);
+                debug_assert_eq!(VM::calc_stack_effect(&self.chunk()[top..]), 1);
 
-                self.vm.chunk.push(OpCode::Discard as u8);
+                self.chunk_mut().push(OpCode::Discard as u8);
             }
             Ast::LetDecl { name, ty: _, body } => {
                 self.compile_expr(body, pool)?;
@@ -281,12 +328,11 @@ impl Compiler {
                         depth: self.scope_depth,
                     });
                 } else {
-                    self.vm.data.push(Value::UTF8(name));
+                    self.data.push(Value::UTF8(name));
 
-                    self.vm.chunk.extend_from_slice(&[
-                        OpCode::DefineGlobal as u8,
-                        self.vm.data.len() as u8 - 1,
-                    ]);
+                    let dfg_idx = self.data.len() as u8 - 1;
+                    self.chunk_mut()
+                        .extend_from_slice(&[OpCode::DefineGlobal as u8, dfg_idx]);
                 }
             }
             Ast::FunDecl {

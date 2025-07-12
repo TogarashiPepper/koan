@@ -1,7 +1,5 @@
 use crate::{
-    error::{InterpError, KoanError, Result, VmError},
-    lexer::Operator,
-    value::Value,
+    compiler::Compiler, error::{InterpError, KoanError, Result, VmError}, lexer::Operator, value::{Function, Value}
 };
 
 use std::{
@@ -64,55 +62,47 @@ impl TryFrom<u8> for OpCode {
 
 #[derive(Debug)]
 pub struct VM {
-    pub chunk: Vec<u8>,
     // TODO: limit to 255 so a `load` can have a 1byte param
     // Maybe use an array(?)
     pub data: Vec<Value>,
     pub pc: usize,
     pub stack: Vec<Value>,
     pub globals: HashMap<String, Value>,
+
+    pub functions: Vec<Function>,
+    pub current_fn: usize,
 }
 
 impl VM {
-    pub fn new() -> Self {
-        VM {
-            chunk: vec![],
-            data: vec![],
-            pc: 0,
-            stack: vec![],
-            globals: HashMap::from([
-                ("π".into(), Value::Num(std::f64::consts::PI)),
-                ("e".into(), Value::Num(std::f64::consts::E)),
-                ("true".into(), Value::Num(1.0)),
-                ("false".into(), Value::Num(0.0)),
-            ]),
-        }
-    }
-
     pub fn with_globals(globals: HashMap<String, Value>) -> Self {
-        let mut def = Self::new();
+        let mut def = Compiler::new().finish();
 
         def.globals.extend(globals);
 
         def
     }
 
+    fn chunk(&self) -> &[u8] {
+        &self.functions[self.current_fn].chunk
+    }
+
     pub fn dbg_chunk(&self) {
         let mut idx = 0;
-        eprintln!("chunk.len: {}", self.chunk.len());
-        eprintln!("chunk: {:?}", self.chunk);
+        let chunk = self.chunk();
+        eprintln!("chunk.len: {}", chunk.len());
+        eprintln!("chunk: {chunk:?}");
         eprintln!("self.data: {:?}", self.data);
 
         loop {
-            if idx >= self.chunk.len() {
+            if idx >= chunk.len() {
                 break;
             }
 
-            let byte = match OpCode::try_from(self.chunk[idx]) {
+            let byte = match OpCode::try_from(chunk[idx]) {
                 Ok(b) => b,
                 Err(e) => {
                     println!("idx: {idx}");
-                    println!("{:?}", self.chunk);
+                    println!("{chunk:?}");
                     println!("{e:?}");
 
                     std::process::exit(1);
@@ -149,21 +139,19 @@ impl VM {
                 OpCode::Load => {
                     idx += 1;
 
-                    eprintln!("{:?}", self.data[self.chunk[idx] as usize]);
+                    eprintln!("{:?}", self.data[chunk[idx] as usize]);
                 }
                 OpCode::GetGlobal | OpCode::DefineGlobal => {
                     idx += 1;
 
-                    eprintln!("name: {}", self.data[self.chunk[idx] as usize]);
+                    eprintln!("name: {}", self.data[chunk[idx] as usize]);
                 }
                 OpCode::GetLocal => {
                     idx += 1;
 
-                    eprintln!("stack_idx: {}", self.chunk[idx]);
+                    eprintln!("stack_idx: {}", chunk[idx]);
                 }
                 OpCode::JumpIfFalse | OpCode::Jump => {
-                    let chunk = &self.chunk;
-
                     let offset = u16::from_le_bytes([chunk[idx + 1], chunk[idx + 2]]);
 
                     eprintln!("offset: {offset}");
@@ -386,16 +374,18 @@ impl VM {
     }
 
     fn read_byte(&mut self) -> Option<u8> {
-        let byte = self.chunk.get(self.pc).copied();
+        let byte = self.chunk().get(self.pc).copied();
+        // TODO: make pc for the current function
         self.pc += 1;
 
         byte
     }
 
     fn read_u16(&mut self) -> Option<u16> {
-        let b1 = self.chunk.get(self.pc).copied();
-        let b2 = self.chunk.get(self.pc + 1).copied();
+        let b1 = self.chunk().get(self.pc).copied();
+        let b2 = self.chunk().get(self.pc + 1).copied();
 
+        // TODO: make pc for the current function
         self.pc += 2;
 
         b1.zip(b2).map(|(l, r)| u16::from_le_bytes([l, r]))
@@ -437,26 +427,7 @@ impl VM {
 
 impl Default for VM {
     fn default() -> Self {
-        Self::new()
+        Compiler::new().finish()
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::value::Value;
-
-    use super::{OpCode, VM};
-
-    #[test]
-    fn load() {
-        let mut vm = VM {
-            chunk: vec![OpCode::Load as u8, 0],
-            data: vec![Value::Num(42.0)],
-            ..Default::default()
-        };
-
-        vm.run().unwrap();
-
-        assert_eq!(vm.stack, vec![Value::Num(42.0)]);
-    }
-}

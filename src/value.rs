@@ -23,10 +23,10 @@ pub enum Value {
 }
 
 #[derive(Clone, Debug)]
-struct Function {
-    arity: usize,
-    chunk: Vec<u8>,
-    name: String,
+pub struct Function {
+    pub arity: usize,
+    pub chunk: Vec<u8>,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
