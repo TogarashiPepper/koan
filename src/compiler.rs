@@ -61,7 +61,8 @@ impl Compiler {
     pub fn finish(self) -> VM {
         VM {
             pc: 0,
-            stack: vec![],
+            // TODO: remove the nothing, currently used by part of crafting interpreters that im on
+            stack: vec![Value::Nothing],
             globals: self.globals,
             functions: self.functions,
             current_fn: self.current_fn,
