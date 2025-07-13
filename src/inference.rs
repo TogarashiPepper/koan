@@ -303,6 +303,8 @@ pub fn infer_exp(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::{
         lexer::lex,
         parser::{Ast, parse},
@@ -346,5 +348,18 @@ mod tests {
         for sym in ["+", "-", "^", "*", "/"] {
             test_infer_exp(format!("2 {sym} 1"), ValTy::Number);
         }
+    }
+
+    #[test]
+    fn statesim_getset() {
+        let mut state_sim = StateSim::new();
+
+        state_sim.set("foo".to_owned(), ValTy::Number);
+
+        state_sim.variables.push(HashMap::new());
+
+        state_sim.set("foo".to_owned(), ValTy::String);
+
+        assert_eq!(state_sim.get("foo").unwrap(), ValTy::String);
     }
 }
